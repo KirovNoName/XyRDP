@@ -331,7 +331,27 @@ if ($cfg.wallpaper) {
 }
 
 # ---------- 5. XYDESK HOST (rdp.xydesk.my.id) ----------
+function Get-XyDeskIds {
+  # ID PC XyDesk = turunan IPv4 (sama seperti XyDeskHost-Setup.bat):
+  #   num = (a<<24)|(b<<16)|(c<<8)|d ; d = num 10-digit ; id = d[0:3]-d[3:6]-d[6:10]
+  $ids = @()
+  try {
+    $ips = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' }
+    foreach ($ipObj in $ips) {
+      $parts = $ipObj.IPAddress.Split('.')
+      $num = ([uint64]$parts[0] -shl 24) -bor ([uint64]$parts[1] -shl 16) -bor ([uint64]$parts[2] -shl 8) -bor ([uint64]$parts[3])
+      $d = $num.ToString('0000000000')
+      if ($d.Length -ge 10) {
+        $ids += [pscustomobject]@{ iface = $ipObj.InterfaceAlias; ip = $ipObj.IPAddress; id = ($d.Substring(0,3) + '-' + $d.Substring(3,3) + '-' + $d.Substring(6,4)) }
+      }
+    }
+  } catch { Log "  hitung ID XyDesk gagal: $($_.Exception.Message)" }
+  return $ids
+}
+
 $resHost = 'skip'
+$xdIds   = @()
+$xdPrimary = $null
 if ($cfg.xydesk_host) {
   Log 'XYDESK HOST: jalankan setup otomatis dari rdp.xydesk.my.id/host.ps1 ...'
   try {
@@ -342,6 +362,16 @@ if ($cfg.xydesk_host) {
     if ($tail) { Log "  host.ps1: $tail" }
     $resHost = 'ok'
   } catch { Log "  setup XyDesk host gagal (tidak kritis): $($_.Exception.Message)"; $resHost = 'gagal' }
+
+  # hitung ID PC XyDesk dari IP (yang utama = IP Tailscale)
+  $xdIds = Get-XyDeskIds
+  $xdPrimary = @($xdIds | Where-Object { $_.ip -eq $ip4 } | Select-Object -First 1)
+  if ($xdPrimary.Count -eq 0 -and $xdIds.Count -gt 0) { $xdPrimary = @($xdIds | Where-Object { $_.iface -like '*Tailscale*' } | Select-Object -First 1) }
+  if ($xdPrimary.Count -eq 0 -and $xdIds.Count -gt 0) { $xdPrimary = @($xdIds[0]) }
+  if ($xdPrimary.Count -gt 0) {
+    Log ("  ID PC XyDesk (Tailscale {0}): {1}  — password = password login Windows (= password RDP)" -f $xdPrimary[0].ip, $xdPrimary[0].id)
+    foreach ($x in $xdIds) { Log ("    • {0} [{1}] -> {2}" -f $x.iface, $x.ip, $x.id) }
+  }
 }
 
 # ---------- 6. VERIFIKASI: sesi harus ADMIN ----------
@@ -374,6 +404,8 @@ try {
       wallpaper    = $resWall
       wallpaper_file = $wallName
       xydesk_host  = $resHost
+      xydesk_id    = if ($xdPrimary -and $xdPrimary.Count -gt 0) { $xdPrimary[0].id } else { '' }
+      xydesk_ids   = @($xdIds)
       admin        = $adminOk
     }
     $j | Add-Member -NotePropertyName 'extras' -NotePropertyValue $extras -Force

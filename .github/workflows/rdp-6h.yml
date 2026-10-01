@@ -87,6 +87,11 @@ jobs:
       RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
       TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
       TAILSCALE_API_TOKEN: ${{ secrets.TAILSCALE_API_TOKEN }}
+      TAILSCALE_CLIENT_ID: ${{ secrets.TAILSCALE_CLIENT_ID }}
+      TAILSCALE_CLIENT_SECRET: ${{ secrets.TAILSCALE_CLIENT_SECRET }}
+      # PAT scope repo — buat hapus run lama (opsional; kosong = cleanup dilewati)
+      CLEANUP_TOKEN: ${{ secrets.CLEANUP_TOKEN }}
+      KEEP_RUNS: "3"
       # NB: runner >=2.3xx tidak lagi inject GITHUB_TOKEN ke env langkah;
       # harus dieksplisitkan supaya publish-status.ps1 bisa push.
       GITHUB_TOKEN: ${{ github.token }}
@@ -113,10 +118,11 @@ jobs:
         shell: pwsh
         run: ./scripts/keepalive.ps1
 
-      - name: Finalize (matikan status, tailscale logout)
+      - name: Finalize (matikan status, tailscale logout + hapus node, bersih-bersih run lama)
         if: always()
         continue-on-error: true
         shell: pwsh
         run: |
           ./scripts/publish-status.ps1 -Active $false
           ./scripts/finalize-rdp.ps1
+          ./scripts/cleanup-actions.ps1

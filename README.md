@@ -17,7 +17,8 @@ diakses lewat **Tailscale** (tidak ada port publik), sesi ditahan **pas 6 jam**
 | `scripts/setup-extras.ps1` | MODE EKSTRA: Lightshot + wallpaper + taskbar translucent + XyDesk host auto-setup |
 | `scripts/keepalive.ps1` | Loop penahan sesi + heartbeat tiap 5 menit |
 | `scripts/publish-status.ps1` | Tulis `rdp-status.json` ke branch `status` (dibaca web) |
-| `scripts/finalize-rdp.ps1` | Logout Tailscale (+hapus device jika ada API token) |
+| `scripts/finalize-rdp.ps1` | Logout Tailscale + **hapus node dari tailnet** (OAuth/API token) |
+| `scripts/cleanup-actions.ps1` | Bersih-bersih: hapus run Actions lama + log-nya (simpan 3 terbaru) |
 | `assets/rdp-extras.json` | Konfigurasi ekstra (bisa diubah dari dashboard web) |
 | `assets/wallpaper.jpg` | Wallpaper default (ganti lewat dashboard web: upload → pasang) |
 | `web/` | Dashboard lokal (Node, tanpa dependency) |
@@ -52,6 +53,31 @@ translucent/Lightshot/XyDesk host. Dashboard menulis balik ke repo via GitHub AP
 edit file manual. Catatan: VM sekali-pakai — tidak ada yang bisa "di-apply live"
 ke sesi yang sedang jalan.
 
+## Setelah sesi selesai — otomatis bersih
+Step **Finalize** (selalu jalan, apa pun hasil sesi) melakukan:
+1. **Tailscale logout** + **hapus node dari tailnet** — butuh kredensial API
+   (lihat di bawah). Tanpa kredensial: node biarkan (key ephemeral = autohapus sendiri).
+2. **Status dibersihkan** — `rdp-status.json` di-set `inactive` dan IP/DNS/ID XyDesk
+   **dihapus** dari file publik (tidak ada jejak IP nyangkut di branch `status`).
+3. **Run Actions lama dihapus** (termasuk log-nya) — simpan 3 run terbaru
+   (`KEEP_RUNS`). Butuh secret `CLEANUP_TOKEN` (PAT scope `repo`).
+
+Kredensial Tailscale (pilih salah satu, set di Settings repo → Secrets):
+| Secret | Cara dapat |
+|---|---|
+| `TAILSCALE_CLIENT_ID` + `TAILSCALE_CLIENT_SECRET` | Tailscale admin console → Settings → OAuth clients (scope **`device:core`** / devices write). **Disarankan.** |
+| `TAILSCALE_API_TOKEN` | Tailscale admin console → Settings → Keys → API access tokens (scope **devices:write**) |
+| *(tidak ada)* | Pakai auth key **Ephemeral** → node autohapus otomatis saat logout |
+
+Cek hasilnya di log step Finalize: `device 'xyrdp-42' DIHAPUS dari tailnet (terverifikasi)`.
+
+## XyDesk ID & Password
+XyDesk Remote Host pakai **ID PC** (turunan dari IPv4, format `nnn-nnn-nnnn`) +
+**password login Windows**. Tiap sesi, `setup-extras.ps1` menghitung ID tersebut
+(sama seperti `XyDeskHost-Setup.bat`) dan menulisnya ke `rdp-status.json`, jadi
+**dashboard menampilkan XyDesk ID otomatis** (beserta tombol SALIN) di panel
+Koneksi. Password-nya = password RDP yang sama (sudah tampil di panel Koneksi).
+
 ## Dashboard Vercel (produksi)
 URL produksi: **https://xyrdp-dash.vercel.app** — halaman terbuka tanpa login; SEMUA endpoint API butuh sesi.
 Login lewat form di web (custom, tanpa dialog browser); cookie `sid` HttpOnly 7 hari. Header `Authorization: Basic`
@@ -74,12 +100,14 @@ cd deploy/vercel && npx vercel deploy --prod --yes --token <VercelToken>
 Config penting: `vercel.json` pakai `routes` legacy `/(.*) -> /api/index.js` supaya semua path lewat function (auth cookie dipegang aplikasi, bukan popup browser), dan `includeFiles: assets/**` supaya `index.html` ikut ke-bundle ke function.
 
 ## Secrets repo (sudah dipasang)
-- `RDP_PASSWORD` — password **tetap** untuk user `xyadmin`
+- `RDP_PASSWORD` — password **tetap** untuk user `xyadmin` (dipakai juga sebagai password XyDesk)
 - `TAILSCALE_AUTH_KEY` — auth key tailnet (harus `tskey-auth-...`)
-- `TAILSCALE_API_TOKEN` — *opsional*, kalau mau device otomatis dihapus dari admin console
+- `CLEANUP_TOKEN` — PAT scope `repo` untuk hapus run Actions lama (sudah dipasang)
+- `TAILSCALE_API_TOKEN` — *opsional*, kalau mau node dihapus otomatis dari admin console
+- `TAILSCALE_CLIENT_ID` + `TAILSCALE_CLIENT_SECRET` — *opsional*, alternatif OAuth (disarankan) untuk hapus node
 
 Password RDP **tidak pernah** muncul di log, commit, atau file status — hanya
-disimpan lokal di `web/config.json`.
+disimpan lokal di `web/config.json` (gitignored).
 
 ## Cara pakai
 1. Install **Tailscale** di PC/HP kamu, login ke **tailnet yang sama** dengan auth key di atas.
@@ -138,10 +166,14 @@ lalu advertise exit node; trafik Chrome keluar dari IP residential.
 { "active": true, "tailscale_ip": "100.x.y.z", "tailscale_dns": "xyrdp-12.tailnet.ts.net",
   "rdp_user": "xyadmin", "started_at": "...", "expires_at": "...",
   "extras": { "lightshot": "ok", "translucent": "ok", "wallpaper": "ok",
-              "wallpaper_file": "wallpaper.jpg", "xydesk_host": "ok", "admin": true } }
+              "wallpaper_file": "wallpaper.jpg", "xydesk_host": "ok",
+              "xydesk_id": "168-375-2296", "xydesk_ids": [ { "iface": "...", "ip": "...", "id": "..." } ],
+              "admin": true } }
 ```
+Saat sesi mati, `active=false`, `stopped_at` diisi, dan IP/DNS/`xydesk_id` dikosongkan.
 Web mem-poll file ini + status run; tidak ada server perantara yang di-hosting.
-Panel “Sesi” di dashboard menampilkan ringkasan `extras` (termasuk bukti sesi admin).
+Panel “Sesi” di dashboard menampilkan ringkasan `extras` (termasuk bukti sesi admin),
+dan panel “Koneksi” menampilkan **XyDesk ID** untuk dipakai bersama password RDP.
 
 ## Input workflow (Run workflow di Actions UI)
 | Input | Isi |
@@ -160,6 +192,8 @@ Panel “Sesi” di dashboard menampilkan ringkasan `extras` (termasuk bukti ses
 | RDP connect ditolak | Pastikan Tailscale di perangkatmu login ke tailnet yang sama (`tailscale status` harus melihat `xyrdp-*`) |
 | Google tetap minta verifikasi | Wajar untuk IP datacenter — pakai `exit_node` |
 | Run kedua “menggantung” | Sengaja: `concurrency` mengantrekan agar tidak 2 VM sekaligus |
+| Node Tailscale nyangkut "offline" di console | Set `TAILSCALE_API_TOKEN` (devices:write) atau OAuth `TAILSCALE_CLIENT_ID/SECRET` (device:core), atau pakai auth key **Ephemeral** |
+| Log `butuh secret CLEANUP_TOKEN` | Tanpa itu run lama tidak bisa dihapus (GITHUB_TOKEN Actions cuma actions:read). Pasang PAT scope `repo` sebagai `CLEANUP_TOKEN` |
 | Log `lightshot=gagal` / `translucent=sebagian` | Tidak fatal — cek log step “Setup ekstra”: winget/website vendor sedang sag atau terganti. Sesi tetap jalan |
 | Wallpaper tidak berubah di sesi baru | Cek `assets/wallpaper.jpg` ada di repo & `wallpaper: true` di `rdp-extras.json`; di dashboard panel “Tampilan” harus muncul pratinjau |
 | Taskbar tidak translucent | Efek native tetap aktif; TranslucentTB portable butuh Windows 10/11 — kalau gagal, ganti mode lewat tray icon |
