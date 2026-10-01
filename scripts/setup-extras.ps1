@@ -348,14 +348,16 @@ if ($cfg.xydesk_host) {
 Log 'VERIFIKASI HAK AKSES:'
 $adminOk = $false
 try {
-  $grpExists = Get-LocalGroup -Group 'Administrators' -ErrorAction SilentlyContinue
+  $grpExists = Get-LocalGroup -Name 'Administrators' -ErrorAction SilentlyContinue
   $usrExists = Get-LocalUser   -Name $u -ErrorAction SilentlyContinue
   if ($grpExists -and $usrExists) {
     $members = Get-LocalGroupMember -Group 'Administrators' | ForEach-Object { ($_.Name -split '\\')[-1] }
     $rdpMembers = @()
     try { $rdpMembers = Get-LocalGroupMember -Group 'Remote Desktop Users' | ForEach-Object { ($_.Name -split '\\')[-1] } } catch {}
     $adminOk = ($members -contains $u)
-    Log ("  user '{0}' ada: YA | Administrators: {1} | Remote Desktop Users: {2}" -f $u, $(if($adminOk){'YA'}else{'TIDAK'}), $(if($rdpMembers -contains $u){'YA'}else{'TIDAK'}))
+    $adminTxt = if ($adminOk) { 'YA' } else { 'TIDAK' }
+    $rdpTxt   = if ($rdpMembers -contains $u) { 'YA' } else { 'TIDAK' }
+    Log ("  user '{0}' ada: YA | Administrators: {1} | Remote Desktop Users: {2}" -f $u, $adminTxt, $rdpTxt)
     $lf = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'LocalAccountTokenFilterPolicy' -ErrorAction SilentlyContinue).LocalAccountTokenFilterPolicy
     Log "  LocalAccountTokenFilterPolicy = $lf (1 = token admin penuh utk sesi jaringan/RDP)"
   } else { Log '  user/grup tidak ditemukan (harusnya sudah dibuat setup-rdp.ps1)' }
@@ -374,7 +376,7 @@ try {
       xydesk_host  = $resHost
       admin        = $adminOk
     }
-    $j | Add-Member -NotePropertyName 'extras' -NoteValue $extras -Force
+    $j | Add-Member -NotePropertyName 'extras' -NotePropertyValue $extras -Force
     ($j | ConvertTo-Json -Depth 6) | Set-Content -Path $outFile -Encoding utf8
     Log 'ringkasan ekstra ditulis ke out/rdp-status.json'
   }
@@ -382,5 +384,6 @@ try {
 
 Close-DefaultHive
 
-Log ("SELESAI — lightshot={0} translucent={1} wallpaper={2} xydesk_host={3} admin={4}" -f $resLightshot, $resTrans, $resWall, $resHost, $(if($adminOk){'YA'}else={'??'}))
+$adminTxt = if ($adminOk) { 'YA' } else { 'TIDAK' }
+Log ("SELESAI — lightshot={0} translucent={1} wallpaper={2} xydesk_host={3} admin={4}" -f $resLightshot, $resTrans, $resWall, $resHost, $adminTxt)
 exit 0
