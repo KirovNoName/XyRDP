@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>XyRDP Control Panel</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1117'/%3E%3Cpath d='M9 8l14 16M23 8L9 24' stroke='%234da3ff' stroke-width='3.4' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
   :root{
     --bg:#0a0c10; --panel:#11151c; --panel2:#0d1117; --line:#1e2632;
@@ -15,16 +16,24 @@
   body{background:var(--bg);color:var(--txt);font:13px/1.55 var(--mono);min-height:100vh}
   header{display:flex;align-items:center;justify-content:space-between;gap:12px;
     padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0;z-index:5}
+  header:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
+    background:linear-gradient(90deg,transparent,var(--acc),transparent);opacity:.5}
   .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.06em}
+  .brand svg{flex:none;border-radius:6px}
   .dot{width:9px;height:9px;border-radius:50%;background:#39424d;flex:none}
   .dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
   .dot.mid{background:var(--warn)}
   .dot.err{background:var(--bad)}
-  .repo{color:var(--dim);font-size:11px}
+  .repo{color:var(--dim);font-size:11px;text-align:right;line-height:1.5}
+  .repo b{color:#8fa3b8;font-weight:700}
   main{padding:20px;max-width:1180px;margin:0 auto}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
-  .panel h2{font-size:10px;font-weight:700;letter-spacing:.16em;color:var(--dim);text-transform:uppercase;margin-bottom:12px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;transition:border-color .15s}
+  .panel:hover{border-color:#26313f}
+  .panel h2{font-size:10px;font-weight:700;letter-spacing:.16em;color:var(--dim);text-transform:uppercase;margin-bottom:12px;
+    display:flex;align-items:center;gap:7px}
+  .panel h2 svg{opacity:.65;flex:none}
+  .panel h2 .pill{margin-left:auto}
   .row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 0;border-bottom:1px dotted #171f2a}
   .row:last-child{border-bottom:0}
   .k{color:var(--dim)}
@@ -69,11 +78,31 @@
     transition:.25s;pointer-events:none;max-width:320px}
   .flash.show{opacity:1;transform:none}
   footer{padding:16px 20px;color:#3d4a59;font-size:11px;text-align:center}
+  /* --- wallpaper dropzone --- */
+  .drop{border:1.5px dashed #2a3646;border-radius:8px;background:#0b0f15;min-height:132px;
+    display:flex;align-items:center;justify-content:center;text-align:center;cursor:pointer;
+    padding:10px;transition:.15s;overflow:hidden;position:relative}
+  .drop:hover{border-color:#3b4f6b}
+  .drop.over{border-color:var(--acc);background:#0d1520}
+  .drop img{max-width:100%;max-height:180px;border-radius:5px;display:block}
+  .droptxt{color:var(--dim);font-size:11.5px;line-height:1.7;padding:8px}
+  .droptxt small{color:#4a5a6c;font-size:10.5px}
+  /* --- switch --- */
+  .switch{position:relative;display:inline-block;width:38px;height:20px;flex:none}
+  .switch input{opacity:0;width:0;height:0}
+  .switch i{position:absolute;inset:0;background:#232c38;border:1px solid var(--line);border-radius:99px;transition:.18s}
+  .switch i:before{content:"";position:absolute;width:14px;height:14px;left:2px;top:2px;background:#5c6c7e;border-radius:50%;transition:.18s}
+  .switch input:checked + i{background:#12301f;border-color:#1c4630}
+  .switch input:checked + i:before{transform:translateX(18px);background:var(--ok)}
+  select.compact{width:auto;min-width:120px;padding:6px 8px;font-size:12px}
 </style>
 </head>
 <body>
 <header>
-  <div class="brand"><span class="dot" id="hdot"></span><span>XyRDP CONTROL PANEL</span></div>
+  <div class="brand">
+    <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#11151c" stroke="#1e2632"/><path d="M9 8l14 16M23 8L9 24" stroke="#4da3ff" stroke-width="3.4" stroke-linecap="round"/></svg>
+    <span class="dot" id="hdot"></span><span>XyRDP CONTROL PANEL</span>
+  </div>
   <div class="repo" id="repoTop"></div>
 </header>
 
@@ -90,32 +119,34 @@
 
   <div id="app" class="grid hidden">
     <div class="panel">
-      <h2>Sesi</h2>
+      <h2><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Sesi</h2>
       <div class="row"><span class="k">Kondisi</span><span class="v"><span class="pill" id="stPill">MEMERIKSA</span></span></div>
       <div class="row"><span class="k">Run Actions</span><span class="v"><a id="stRun" href="#" target="_blank" rel="noopener">-</a></span></div>
       <div class="row"><span class="k">Dimulai</span><span class="v" id="stStart">-</span></div>
       <div class="row"><span class="k">Berakhir otomatis</span><span class="v" id="stEnd">-</span></div>
       <div class="row"><span class="k">Sisa waktu</span><span class="v big" id="stLeft">-</span></div>
+      <div class="row"><span class="k">Ekstra sesi ini</span><span class="v" id="stExtras">-</span></div>
       <div class="bar"><i id="stBar"></i></div>
     </div>
 
     <div class="panel">
-      <h2>Koneksi Remote Desktop</h2>
+      <h2><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8"/></svg>Koneksi Remote Desktop</h2>
       <div class="row"><span class="k">Alamat (Tailscale)</span>
         <span class="v"><span id="cIp">-</span> <button class="mini" data-copy="cIp">SALIN</button></span></div>
       <div class="row"><span class="k">MagicDNS</span><span class="v" id="cDns">-</span></div>
       <div class="row"><span class="k">Port</span><span class="v" id="cPort">-</span></div>
       <div class="row"><span class="k">Pengguna</span>
         <span class="v"><span id="cUser">-</span> <button class="mini" data-copy="cUser">SALIN</button></span></div>
+      <div class="row"><span class="k">Hak akses</span><span class="v">Administrator <small>(grup Administrators + Remote Desktop Users, token admin penuh)</small></span></div>
       <div class="row"><span class="k">Kata sandi</span>
         <span class="v"><span id="cPass">************</span>
           <button class="mini" id="cToggle">TAMPIL</button>
           <button class="mini" data-copy="cPassVal">SALIN</button></span></div>
-      <div class="hint">Pastikan Tailscale di perangkatmu aktif dan login ke tailnet yang sama, lalu gunakan aplikasi Remote Desktop dengan alamat di atas.</div>
+      <div class="hint">Pastikan Tailscale di perangkatmu aktif dan login ke tailnet yang sama, lalu gunakan aplikasi Remote Desktop dengan alamat di atas. Sesi selalu masuk sebagai <b>Administrator</b>, bukan user terbatas.</div>
     </div>
 
     <div class="panel">
-      <h2>Kontrol</h2>
+      <h2><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12l1-9z"/></svg>Kontrol</h2>
       <div class="two">
         <div><label>Durasi</label>
           <select id="fDur">
@@ -127,13 +158,48 @@
           </select></div>
         <div><label>Hostname</label><input id="fHost" value="xyrdp" spellcheck="false"></div>
       </div>
-      <div class="hint" style="margin-top:12px">Mode bersih: tanpa tweak Windows/Chrome dan tanpa cek reputasi IP. Windows apa adanya, akses admin penuh.</div>
+      <div class="hint" style="margin-top:12px">Mode bersih: tanpa tweak Windows/Chrome dan tanpa cek reputasi IP. Windows apa adanya, akses admin penuh. Setiap sesi baru otomatis memasang Lightshot, wallpaper, taskbar translucent, dan XyDesk host (atur di panel Tampilan).</div>
       <div class="btns">
         <button class="primary" id="bStart" style="flex:2">NYALAKAN</button>
         <button class="danger" id="bStop" style="flex:1">MATIKAN</button>
       </div>
       <div class="note" id="opNote"></div>
       <div class="hint">Satu sesi aktif; permintaan baru otomatis mengantre. Windows runner menghitung 2x kuota menit Actions.</div>
+    </div>
+
+    <div class="panel">
+      <h2><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>Tampilan &amp; Aplikasi <span class="pill" id="exPill">-</span></h2>
+
+      <div class="drop" id="wpDrop">
+        <input type="file" id="wpFile" accept="image/png,image/jpeg,image/bmp" class="hidden">
+        <img id="wpPrev" class="hidden" alt="pratinjau wallpaper">
+        <div class="droptxt" id="wpDropTxt">Tarik &amp; lepas gambar ke sini, atau klik untuk memilih<br>
+          <small>JPG / PNG / BMP — otomatis dikecilkan (maks 1920px) sebelum diunggah</small></div>
+      </div>
+      <div class="btns">
+        <button class="primary" id="wpUp" style="flex:1">UNGGAH &amp; PASANG</button>
+      </div>
+      <div class="note" id="wpNote"></div>
+
+      <label style="margin-top:16px">Taskbar translucent</label>
+      <div class="row"><span class="k">Translucent</span>
+        <span class="v"><label class="switch"><input type="checkbox" id="exTrans"><i></i></label></span></div>
+      <div class="row"><span class="k">Mode</span>
+        <span class="v"><select id="exMode" class="compact">
+          <option value="clear">Clear (transparan)</option>
+          <option value="blur">Blur</option>
+          <option value="acrylic">Acrylic</option>
+          <option value="opaque">Opaque</option>
+          <option value="normal">Normal</option>
+        </select></span></div>
+      <label style="margin-top:16px">Aplikasi</label>
+      <div class="row"><span class="k">Lightshot (screenshot)</span>
+        <span class="v"><label class="switch"><input type="checkbox" id="exLs"><i></i></label></span></div>
+      <div class="row"><span class="k">XyDesk host auto-setup</span>
+        <span class="v"><label class="switch"><input type="checkbox" id="exHost"><i></i></label></span></div>
+      <div class="btns"><button id="exSave" style="flex:1">SIMPAN PENGATURAN</button></div>
+      <div class="note" id="exNote"></div>
+      <div class="hint">Berlaku otomatis pada sesi <b>berikutnya</b> (VM sekali-pakai). Gambar &amp; pengaturan disimpan di repo (<code>assets/</code>), bukan di VM.</div>
     </div>
 
     <div class="panel" style="grid-column:1/-1">
@@ -149,17 +215,19 @@
   </div>
 </main>
 
-<footer>XyRDP - GitHub Actions windows-latest - jaringan lewat Tailscale</footer>
+<footer>XyRDP - GitHub Actions windows-latest - jaringan lewat Tailscale - sesi Administrator penuh</footer>
 <div class="flash" id="flash"></div>
 
 <script>
 (function(){
   var $=function(id){return document.getElementById(id)},
-      cfg={}, authed=false, lastRun=null, passShown=false, stopArmed=0, t0=null, t1=null;
+      cfg={}, authed=false, lastRun=null, passShown=false, stopArmed=0, t0=null, t1=null, wpData=null;
 
   function flash(msg){var f=$('flash');f.textContent=msg;f.classList.add('show');
     clearTimeout(f._t);f._t=setTimeout(function(){f.classList.remove('show')},2400)}
   function note(msg,cls){var n=$('opNote');n.textContent=msg;n.className='note '+(cls||'')}
+  function wpNote(msg,cls){var n=$('wpNote');n.textContent=msg;n.className='note '+(cls||'')}
+  function exNote(msg,cls){var n=$('exNote');n.textContent=msg;n.className='note '+(cls||'')}
 
   function api(p,method,body){
     var opt={method:method||'GET',headers:{'Content-Type':'application/json'}};
@@ -172,7 +240,7 @@
   }
 
   function enterApp(){$('loginBox').classList.add('hidden');$('app').classList.remove('hidden');
-    authed=true;poll();pullLogs()}
+    authed=true;poll();pullLogs();loadExtras()}
 
   function doLogin(){
     var u=$('luser').value.trim(),p=$('lpass').value;
@@ -191,6 +259,18 @@
 
   function setPill(txt,cls){var e=$('stPill');e.textContent=txt;e.className='pill '+(cls||'')}
 
+  function extrasText(g){
+    if(!g||!g.extras)return '-';
+    var e=g.extras,lbl={ok:'ok',gagal:'gagal',sebagian:'sebagian',skip:'mati',default:'default'};
+    var s=[];
+    if(e.lightshot)s.push('lightshot:'+(lbl[e.lightshot]||e.lightshot));
+    if(e.translucent)s.push('translucent:'+(lbl[e.translucent]||e.translucent));
+    if(e.wallpaper)s.push('wallpaper:'+(lbl[e.wallpaper]||e.wallpaper)+(e.wallpaper_file?(' '+e.wallpaper_file):''));
+    if(e.xydesk_host)s.push('xydesk:'+(lbl[e.xydesk_host]||e.xydesk_host));
+    s.push('admin:'+(e.admin===true?'YA':(e.admin===false?'TIDAK':'-')));
+    return s.join(' • ')||'-'
+  }
+
   function poll(){
     return api('/status').then(function(s){
       if(!authed)return;
@@ -208,6 +288,7 @@
       var ip=g?g.tailscale_ip:'-', dns=g?(g.tailscale_dns||'-'):'-', st=g?g.started_at:null, en=g?g.expires_at:null;
       $('cIp').textContent=ip; $('cDns').textContent=dns;
       $('stStart').textContent=fmt(st); $('stEnd').textContent=fmt(en);
+      $('stExtras').textContent=extrasText(g);
       t0=st?Date.parse(st):null; t1=en?Date.parse(en):null; tickLeft();
       if(g&&g.active&&ip!=='-'&&ip!==poll._ip){poll._ip=ip;flash('Sesi aktif: '+ip)}
     }).catch(function(){})
@@ -273,11 +354,83 @@
   setInterval(function(){if($('logAuto').checked)pullLogs(false)},30000);
   setInterval(function(){if(authed)poll()},10000);
 
+  // ---------- tampilan & aplikasi (wallpaper + ekstra) ----------
+  function loadExtras(){
+    api('/extras').then(function(c){
+      $('exTrans').checked=!!c.config.translucent;
+      $('exMode').value=c.config.translucent_mode||'clear';
+      $('exLs').checked=!!c.config.lightshot;
+      $('exHost').checked=!!c.config.xydesk_host;
+      if(c.config.wallpaper){
+        var im=$('wpPrev');im.src=c.wallpaper_url;im.classList.remove('hidden');$('wpDropTxt').classList.add('hidden');
+        $('exPill').textContent='wallpaper aktif';$('exPill').className='pill ok';
+      }else{
+        $('wpPrev').classList.add('hidden');$('wpDropTxt').classList.remove('hidden');
+        $('exPill').textContent='wallpaper mati';$('exPill').className='pill';
+      }
+    }).catch(function(){})
+  }
+
+  function pickWallpaper(file){
+    if(!file)return;
+    if(!/^image\/(png|jpeg|jpg|bmp)$/.test(file.type)){wpNote('Format harus JPG, PNG, atau BMP','bad');return}
+    if(file.size>8*1024*1024){wpNote('Ukuran maksimal 8 MB (sebelum dikecilkan)','bad');return}
+    wpNote('Memproses gambar...');
+    var rd=new FileReader();
+    rd.onload=function(){
+      var img=new Image();
+      img.onload=function(){
+        var max=1920,w=img.width,h=img.height;
+        if(w>max||h>max){var s=Math.min(max/w,max/h);w=Math.round(w*s);h=Math.round(h*s)}
+        var cv=document.createElement('canvas');cv.width=w;cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        wpData=cv.toDataURL('image/jpeg',0.85);
+        $('wpPrev').src=wpData;$('wpPrev').classList.remove('hidden');$('wpDropTxt').classList.add('hidden');
+        wpNote('Pratinjau siap ('+w+'x'+h+', ~'+Math.round(wpData.length*0.75/1024)+' KB) — klik UNGGAH & PASANG','ok');
+      };
+      img.onerror=function(){wpNote('Gambar tidak bisa dibaca','bad')};
+      img.src=rd.result;
+    };
+    rd.readAsDataURL(file);
+  }
+
+  $('wpDrop').addEventListener('click',function(){$('wpFile').click()});
+  $('wpFile').addEventListener('change',function(){pickWallpaper(this.files&&this.files[0]);this.value=''});
+  ;['dragenter','dragover'].forEach(function(ev){
+    $('wpDrop').addEventListener(ev,function(e){e.preventDefault();$('wpDrop').classList.add('over')})
+  });
+  ;['dragleave','drop'].forEach(function(ev){
+    $('wpDrop').addEventListener(ev,function(e){e.preventDefault();$('wpDrop').classList.remove('over')})
+  });
+  $('wpDrop').addEventListener('drop',function(e){
+    var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
+    pickWallpaper(f);
+  });
+
+  $('wpUp').addEventListener('click',function(){
+    if(!wpData){wpNote('Pilih gambar dulu','bad');return}
+    var b=this;b.disabled=true;wpNote('Mengunggah ke repo...');
+    api('/wallpaper','POST',{image:wpData})
+      .then(function(r){wpNote('Wallpaper terpasang: '+r.file+' ('+r.size_kb+' KB) — aktif otomatis di sesi berikutnya','ok');
+        flash('Wallpaper diperbarui');wpData=null;loadExtras()})
+      .catch(function(e){wpNote('Gagal: '+e.message,'bad')})
+      .finally(function(){b.disabled=false})
+  });
+
+  $('exSave').addEventListener('click',function(){
+    var b=this;b.disabled=true;exNote('Menyimpan...');
+    api('/extras','POST',{translucent:$('exTrans').checked,translucent_mode:$('exMode').value,
+      lightshot:$('exLs').checked,xydesk_host:$('exHost').checked})
+      .then(function(){exNote('Tersimpan — berlaku otomatis di sesi berikutnya','ok');flash('Pengaturan ekstra tersimpan');loadExtras()})
+      .catch(function(e){exNote('Gagal: '+e.message,'bad')})
+      .finally(function(){b.disabled=false})
+  });
+
   fetch('/api/config',{headers:{'Content-Type':'application/json'}}).then(function(r){
     if(r.status===403)return r.json().then(function(){throw new Error('auth')});
     return r.json()
   }).then(function(c){cfg=c;
-    $('repoTop').textContent=c.owner+'/'+c.repo;
+    $('repoTop').innerHTML='<b>'+c.owner+' / '+c.repo+'</b><br>sesi Administrator penuh';
     $('cUser').textContent=c.rdp_user;$('cPort').textContent=c.rdp_port;
     enterApp()})
   .catch(function(){$('loginBox').classList.remove('hidden')})

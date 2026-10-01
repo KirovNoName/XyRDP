@@ -14,11 +14,43 @@ diakses lewat **Tailscale** (tidak ada port publik), sesi ditahan **pas 6 jam**
 |---|---|
 | `.github/workflows/rdp-6h.yml` | Workflow utama: boot VM, setup RDP, join Tailscale, tahan 6 jam |
 | `scripts/setup-rdp.ps1` | MODE BERSIH: bikin admin, buka RDP, join Tailscale (tanpa tweak lain) |
+| `scripts/setup-extras.ps1` | MODE EKSTRA: Lightshot + wallpaper + taskbar translucent + XyDesk host auto-setup |
 | `scripts/keepalive.ps1` | Loop penahan sesi + heartbeat tiap 5 menit |
 | `scripts/publish-status.ps1` | Tulis `rdp-status.json` ke branch `status` (dibaca web) |
 | `scripts/finalize-rdp.ps1` | Logout Tailscale (+hapus device jika ada API token) |
+| `assets/rdp-extras.json` | Konfigurasi ekstra (bisa diubah dari dashboard web) |
+| `assets/wallpaper.jpg` | Wallpaper default (ganti lewat dashboard web: upload → pasang) |
 | `web/` | Dashboard lokal (Node, tanpa dependency) |
 | `deploy/vercel/` | Versi dashboard untuk hosting di Vercel (catch-all function + Basic Auth) |
+
+## Mode ekstra (otomatis setiap sesi)
+Setelah VM siap, `setup-extras.ps1` otomatis memasang yang berikut (bisa dimatikan
+lewat input workflow **`ekstra: tidak`**, atau per-item di dashboard web):
+
+| Ekstra | Cara kerja |
+|---|---|
+| **Lightshot** | Install via `winget` (Skillbrains.Lightshot), fallback installer langsung `app.prntscr.com` silent (`/VERYSILENT`). Auto-run saat user login. |
+| **Taskbar translucent** | `EnableTransparency=1` (efek transparansi Windows) + **TranslucentTB** (portable dari GitHub releases, fallback winget) mode default `clear` — bisa diganti: blur/acrylic/opaque/normal. |
+| **Wallpaper** | Dari `assets/wallpaper.*` di repo (default: `wallpaper.jpg`), atau input workflow `wallpaper_url`. Dipasang ke **profil Default** → otomatis aktif saat user RDP login pertama, plus diterapkan ke sesi live. |
+| **XyDesk host** | Menjalankan `https://rdp.xydesk.my.id/host.ps1` otomatis (RDP + QUIC UDP 4433 + AVC444 + audio bridge sesuai halaman host XyDesk). |
+
+Konfigurasi tersimpan di `assets/rdp-extras.json`:
+```json
+{
+  "lightshot": true,           // pasang Lightshot
+  "translucent": true,         // taskbar translucent
+  "translucent_mode": "clear", // clear | blur | acrylic | opaque | normal
+  "wallpaper": true,           // pakai wallpaper dari repo
+  "wallpaper_file": "wallpaper.jpg",
+  "xydesk_host": true          // jalankan setup host rdp.xydesk.my.id
+}
+```
+Semua itu bisa diubah **dari dashboard web** (panel "Tampilan & Aplikasi"):
+upload wallpaper (drag & drop, otomatis dikecilkan maks 1920px) + toggle
+translucent/Lightshot/XyDesk host. Dashboard menulis balik ke repo via GitHub API
+(pakai `GITHUB_TOKEN` scope `repo`), jadi berlaku di sesi **berikutnya** tanpa
+edit file manual. Catatan: VM sekali-pakai — tidak ada yang bisa "di-apply live"
+ke sesi yang sedang jalan.
 
 ## Dashboard Vercel (produksi)
 URL produksi: **https://xyrdp-dash.vercel.app** — halaman terbuka tanpa login; SEMUA endpoint API butuh sesi.
@@ -61,15 +93,23 @@ disimpan lokal di `web/config.json`.
 4. Remote Desktop Connection → alamat `100.x.x.x` → login `xyadmin` + password tetap.
 5. Sesi mati sendiri mendekati jam ke-6. Mau mati sekarang? tombol **MATIKAN**.
 
-## Mode bersih (default sekarang)
-Session = Windows Server **apa adanya**. Yang dilakukan script HANYA:
+## Mode bersih (default) + mode ekstra (otomatis)
+Base = Windows Server **apa adanya**. Yang dilakukan `setup-rdp.ps1` HANYA:
 - Buat user `xyadmin` ∈ **Administrators** + Remote Desktop Users (password tetap, tidak expire)
 - `LocalAccountTokenFilterPolicy=1` → supaya login jaringan dapat token admin penuh (ini bagian dari “akses admin”, bukan tweak)
 - Aktifkan Remote Desktop port 3389 dengan setting default Windows (NLA ON) + rule firewall grup “Remote Desktop”
 - Install + join Tailscale, tulis status
 
-Tidak ada lagi: tweak UAC/Defender/SmartScreen/Chrome/auto-logon, dan cek reputasi IP sudah dihapus.
-Semua itu justru menambah variabel; sesuai request, balik ke vanilla.
+Sesi dijamin **ADMINISTRATOR** (bukan user terbatas): user RDP selalu anggota grup
+Administrators, token admin penuh aktif, dan `setup-extras.ps1` memverifikasi
+keanggotaan grup tiap sesi (hasilnya masuk ke `rdp-status.json` → `extras.admin`
+dan tampil di dashboard).
+
+Tidak ada lagi: tweak UAC/Defender/SmartScreen/Chrome/auto-logon, dan cek reputasi
+IP sudah dihapus. Semua itu justru menambah variabel; sesuai request, balik ke vanilla.
+Di atas base itu, mode ekstra (Lightshot / wallpaper / translucent / XyDesk host)
+berjalan otomatis — lihat bagian “Mode ekstra” di atas. Matikan lewat input
+workflow `ekstra: tidak` kalau butuh VM benar-benar polos.
 
 ## Login Google dari dalam RDP — fakta jujurnya
 Google menantang login berdasarkan **perangkat baru + IP datacenter (Azure)**,
@@ -96,9 +136,21 @@ lalu advertise exit node; trafik Chrome keluar dari IP residential.
 ## Struktur status (branch `status` → `rdp-status.json`)
 ```json
 { "active": true, "tailscale_ip": "100.x.y.z", "tailscale_dns": "xyrdp-12.tailnet.ts.net",
-  "rdp_user": "xyadmin", "started_at": "...", "expires_at": "...", "public_ip": "20.x...", "ip_note": "..." }
+  "rdp_user": "xyadmin", "started_at": "...", "expires_at": "...",
+  "extras": { "lightshot": "ok", "translucent": "ok", "wallpaper": "ok",
+              "wallpaper_file": "wallpaper.jpg", "xydesk_host": "ok", "admin": true } }
 ```
 Web mem-poll file ini + status run; tidak ada server perantara yang di-hosting.
+Panel “Sesi” di dashboard menampilkan ringkasan `extras` (termasuk bukti sesi admin).
+
+## Input workflow (Run workflow di Actions UI)
+| Input | Isi |
+|---|---|
+| `durasi_menit` | 15 … 360 (batas keras job GitHub) |
+| `ts_hostname` | hostname Tailscale ( dapat suffix nomor run, mis. `xyrdp-42`) |
+| `ekstra` | `ya` (default) / `tidak` — master switch Lightshot+wallpaper+translucent+XyDesk host |
+| `wallpaper_url` | URL wallpaper sendiri (jpg/png/bmp); kosong = pakai `assets/wallpaper.*` di repo |
+| `exit_node` | (lanjutan) Tailscale exit node |
 
 ## Troubleshooting
 | Gejala | Penyebab umum |
@@ -108,3 +160,7 @@ Web mem-poll file ini + status run; tidak ada server perantara yang di-hosting.
 | RDP connect ditolak | Pastikan Tailscale di perangkatmu login ke tailnet yang sama (`tailscale status` harus melihat `xyrdp-*`) |
 | Google tetap minta verifikasi | Wajar untuk IP datacenter — pakai `exit_node` |
 | Run kedua “menggantung” | Sengaja: `concurrency` mengantrekan agar tidak 2 VM sekaligus |
+| Log `lightshot=gagal` / `translucent=sebagian` | Tidak fatal — cek log step “Setup ekstra”: winget/website vendor sedang sag atau terganti. Sesi tetap jalan |
+| Wallpaper tidak berubah di sesi baru | Cek `assets/wallpaper.jpg` ada di repo & `wallpaper: true` di `rdp-extras.json`; di dashboard panel “Tampilan” harus muncul pratinjau |
+| Taskbar tidak translucent | Efek native tetap aktif; TranslucentTB portable butuh Windows 10/11 — kalau gagal, ganti mode lewat tray icon |
+| Upload wallpaper error dari dashboard | `GITHUB_TOKEN` Vercel/lokal harus scope `repo` + branch `main`; gambar maks 3 MB setelah dikecilkan |

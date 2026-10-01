@@ -10,6 +10,13 @@ run-name: "XyRDP ${{ inputs.ts_hostname || 'xyrdp' }} • ${{ inputs.durasi_meni
 #  - Akses masuk via Tailscale (IP 100.x.x.x), tidak ada port publik dibuka
 #  - Status session ditulis ke branch `status` -> dibaca web dashboard
 #  - Password TIDAK PERNAH ditulis ke log, commit, maupun file status
+#
+#  EKSTRA (otomatis, bisa dimatikan lewat input "ekstra"):
+#    - Lightshot (screenshot) terpasang & auto-run
+#    - Taskbar translucent (TranslucentTB + efek transparansi Windows)
+#    - Wallpaper dari assets/wallpaper.* di repo (upload via web dashboard)
+#    - XyDesk host setup (rdp.xydesk.my.id/host.ps1) dijalankan otomatis
+#  Konfigurasi ekstra: assets/rdp-extras.json (bisa diubah dari dashboard web)
 # ============================================================================
 
 on:
@@ -34,6 +41,19 @@ on:
         description: "Hostname Tailscale (akan dapat suffix nomor run, mis: xyrdp-42)"
         required: false
         default: "xyrdp"
+        type: string
+      ekstra:
+        description: "Ekstra otomatis: Lightshot + wallpaper + taskbar translucent + XyDesk host setup"
+        required: false
+        default: "ya"
+        type: choice
+        options:
+          - "ya"
+          - "tidak"
+      wallpaper_url:
+        description: "(OPSIONAL) URL wallpaper sendiri (jpg/png/bmp). Kosong = pakai assets/wallpaper.* di repo"
+        required: false
+        default: ""
         type: string
       exit_node:
         description: "(OPSIONAL/lanjutan) Tailscale exit node. Kosong = bawaan. Bisa juga diisi manual lewat Actions UI"
@@ -60,6 +80,8 @@ jobs:
     env:
       DUR: ${{ inputs.durasi_menit }}
       TS_HOSTNAME: ${{ inputs.ts_hostname }}
+      EXTRAS: ${{ inputs.ekstra }}
+      WALLPAPER_URL: ${{ inputs.wallpaper_url }}
       EXIT_NODE: ${{ inputs.exit_node }}
       RDP_USER: xyadmin
       RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
@@ -76,6 +98,11 @@ jobs:
       - name: Setup RDP + Tailscale (bersih)
         shell: pwsh
         run: ./scripts/setup-rdp.ps1
+
+      - name: Setup ekstra (Lightshot + wallpaper + translucent + XyDesk host)
+        if: ${{ inputs.ekstra != 'tidak' }}
+        shell: pwsh
+        run: ./scripts/setup-extras.ps1
 
       - name: Publish status ke branch 'status'
         continue-on-error: true

@@ -100,6 +100,33 @@ async function readLog(runId) {
   return buf.toString('utf8'); // GitHub kini memberi job log sebagai text/plain
 }
 
+// ---- konfigurasi ekstra (assets/rdp-extras.json di repo) + wallpaper ----
+const EXTRAS_PATH = 'assets/rdp-extras.json';
+const EXTRAS_DEFAULTS = { lightshot: true, translucent: true, translucent_mode: 'clear', wallpaper: true, wallpaper_file: 'wallpaper.jpg', xydesk_host: true };
+const WALLPAPER_RE = /^wallpaper\.(jpg|jpeg|png|bmp)$/i;
+
+async function readRepoFile(path) {
+  try {
+    const c = await gh('GET', `/repos/${owner}/${repo}/contents/${path}?ref=${branch}`);
+    if (c && c.content) return { json: JSON.parse(Buffer.from(c.content, 'base64').toString('utf8')), sha: c.sha };
+  } catch { /* belum ada */ }
+  return { json: null, sha: null };
+}
+function extrasResponse(cfg, fileExists) {
+  const wf = String(cfg.wallpaper_file || 'wallpaper.jpg').replace(/[^a-zA-Z0-9._-]/g, '');
+  return {
+    config: cfg,
+    wallpaper_exists: fileExists,
+    wallpaper_url: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/assets/${wf}?t=${Date.now()}`,
+  };
+}
+function imageInfo(buf) {
+  if (buf.length >= 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'jpg';
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'png';
+  if (buf.length >= 2 && buf[0] === 0x42 && buf[1] === 0x4D) return 'bmp';
+  return null;
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, 'http://x');
   const send = (code, obj, type = 'application/json') => {
@@ -190,6 +217,71 @@ async function handle(req, res) {
       const txt = await readLog(Number(runId));
       const lines = txt.split('\n');
       return send(200, { run_id: runId, total_lines: lines.length, log: lines.slice(-600).join('\n') });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/extras') {
+      const { json } = await readRepoFile(EXTRAS_PATH);
+      const cfg = Object.assign({}, EXTRAS_DEFAULTS, json || {});
+      return send(200, extrasResponse(cfg, !!(json && json.wallpaper_file)));
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/extras') {
+      let body = '';
+      req.on('data', c => body += c);
+      await new Promise(r => req.on('end', r));
+      const p = JSON.parse(body || '{}');
+      const { json: cur, sha } = await readRepoFile(EXTRAS_PATH);
+      const next = Object.assign({}, EXTRAS_DEFAULTS, cur || {});
+      for (const k of ['lightshot', 'translucent', 'wallpaper', 'xydesk_host']) {
+        if (k in p) next[k] = !!p[k];
+      }
+      if (p.translucent_mode) {
+        const m = String(p.translucent_mode).toLowerCase();
+        if (['normal', 'opaque', 'clear', 'blur', 'acrylic'].includes(m)) next.translucent_mode = m;
+      }
+      const content = Buffer.from(JSON.stringify(next, null, 2) + '\n', 'utf8').toString('base64');
+      await gh('PUT', `/repos/${owner}/${repo}/contents/${EXTRAS_PATH}`,
+        { message: 'XyRDP: update konfigurasi ekstra (via dashboard)', content, branch, ...(sha ? { sha } : {}) });
+      return send(200, { ok: true, config: next });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/wallpaper') {
+      let body = '';
+      req.on('data', c => body += c);
+      await new Promise(r => req.on('end', r));
+      const p = JSON.parse(body || '{}');
+      const m = /^data:image\/(png|jpe?g|bmp);base64,([A-Za-z0-9+/=\s]+)$/.exec(String(p.image || ''));
+      if (!m) return send(400, { error: 'Format gambar tidak didukung (jpg/png/bmp)' });
+      const buf = Buffer.from(m[2].replace(/\s+/g, ''), 'base64');
+      if (buf.length > 3 * 1024 * 1024) return send(400, { error: 'Ukuran gambar maksimal 3 MB (dashboard mengecilkan otomatis)' });
+      const ext = imageInfo(buf);
+      if (!ext) return send(400, { error: 'File bukan gambar jpg/png/bmp yang valid' });
+      const target = `assets/wallpaper.${ext}`;
+      // hapus wallpaper lama dengan ekstensi berbeda supaya tidak dobel
+      try {
+        const list = await gh('GET', `/repos/${owner}/${repo}/contents/assets?ref=${branch}`);
+        if (Array.isArray(list)) {
+          for (const f of list) {
+            if (WALLPAPER_RE.test(f.name) && f.name !== `wallpaper.${ext}`) {
+              await gh('DELETE', `/repos/${owner}/${repo}/contents/${f.path}`,
+                { message: `XyRDP: hapus ${f.name} (diganti wallpaper baru)`, sha: f.sha, branch });
+            }
+          }
+        }
+      } catch { /* abaikan */ }
+      let curSha = null;
+      try { const cur = await gh('GET', `/repos/${owner}/${repo}/contents/${target}?ref=${branch}`); curSha = cur && cur.sha; } catch { /* file baru */ }
+      await gh('PUT', `/repos/${owner}/${repo}/contents/${target}`, {
+        message: `XyRDP: wallpaper baru (${Math.round(buf.length / 1024)} KB, via dashboard)`,
+        content: buf.toString('base64'), branch, ...(curSha ? { sha: curSha } : {}),
+      });
+      const { json: cfgJson, sha: cfgSha } = await readRepoFile(EXTRAS_PATH);
+      const next = Object.assign({}, EXTRAS_DEFAULTS, cfgJson || {}, { wallpaper: true, wallpaper_file: `wallpaper.${ext}` });
+      await gh('PUT', `/repos/${owner}/${repo}/contents/${EXTRAS_PATH}`, {
+        message: 'XyRDP: aktifkan wallpaper baru (via dashboard)',
+        content: Buffer.from(JSON.stringify(next, null, 2) + '\n', 'utf8').toString('base64'), branch, ...(cfgSha ? { sha: cfgSha } : {}),
+      });
+      return send(200, { ok: true, file: `wallpaper.${ext}`, size_kb: Math.round(buf.length / 1024) });
     }
 
     return send(404, { error: 'not found' });
