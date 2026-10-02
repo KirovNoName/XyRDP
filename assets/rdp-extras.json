@@ -1,6 +1,6 @@
 {
   "lightshot": true,
-  "translucent": true,
+  "translucent": false,
   "translucent_mode": "acrylic",
   "wallpaper": true,
   "wallpaper_file": "wallpaper.jpg",
