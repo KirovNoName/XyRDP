@@ -1,7 +1,7 @@
 {
   "lightshot": true,
   "translucent": true,
-  "translucent_mode": "clear",
+  "translucent_mode": "acrylic",
   "wallpaper": true,
   "wallpaper_file": "wallpaper.jpg",
   "xydesk_host": true
