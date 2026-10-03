@@ -126,11 +126,9 @@
     <div class="panel">
       <h2>Koneksi</h2>
       <div class="row"><span class="k">Jalur yang dipakai</span><span class="v" id="cMode">-</span></div>
-      <div class="row"><span class="k">RustDesk ID</span>
-        <span class="v"><span id="cRdId">-</span> <button class="mini" data-copy="cRdId">SALIN</button></span></div>
-      <div class="row"><span class="k">RustDesk server</span><span class="v"><small id="cRdSrv">server publik bawaan</small></span></div>
-      <div class="row"><span class="k">Tunnel RDP</span>
-        <span class="v"><span id="cTun">-</span> <button class="mini" data-copy="cTun">SALIN</button></span></div>
+      <div class="row"><span class="k">Host &amp; Port (XyDesk / mstsc)</span>
+        <span class="v"><span id="cTun">-</span> <button class="mini" data-copy="cTunHost">SALIN HOST</button>
+        <button class="mini" data-copy="cTunPort">SALIN PORT</button></span></div>
       <div class="row"><span class="k">Pengguna</span>
         <span class="v"><span id="cUser">-</span> <button class="mini" data-copy="cUser">SALIN</button></span></div>
       <div class="row"><span class="k">Hak akses</span><span class="v">Administrator <small>(Administrators + Remote Desktop Users, token admin penuh)</small></span></div>
@@ -138,10 +136,15 @@
         <span class="v"><span id="cPass">************</span>
           <button class="mini" id="cToggle">TAMPIL</button>
           <button class="mini" data-copy="cPassVal">SALIN</button></span></div>
-      <div class="hint">Satu kata sandi untuk dua jalur: <b>RustDesk</b> (unduh app-nya di
-        <a href="https://rustdesk.com/download" target="_blank" rel="noopener">rustdesk.com/download</a>, masukkan ID + kata sandi —
-        tanpa VPN, tanpa akun) <b>atau</b> <b>Remote Desktop Connection</b> (<code>mstsc</code>) ke alamat tunnel di atas.
-        Sesi selalu masuk sebagai Administrator.</div>
+      <div class="row"><span class="k">RustDesk ID <small>(cadangan)</small></span>
+        <span class="v"><span id="cRdId">-</span> <button class="mini" data-copy="cRdId">SALIN</button></span></div>
+      <div class="hint"><b>Dari HP (XyDesk Remote):</b> buka <b>Koneksi RDP Penuh</b> → kolom <b>Host</b> = bagian
+        sebelum tanda <code>:</code>, kolom <b>Port</b> = bagian setelahnya (bisa juga tempel
+        <code>host:port</code> di kolom host). Login <b>xyadmin</b> + kata sandi di atas. AVC444, ClearType,
+        clipboard, keyboard, dan <b>audio</b> jalan lewat jalur ini; kalau sertifikat RDP ditanya, terima
+        (sertifikat VM sekali-pakai). <b>RustDesk</b> cuma jalur cadangan kalau tunnel mati.
+        Catatan: audio bridge QUIC XyDesk (UDP 4433) tidak lewat tunnel TCP — klien otomatis
+        fallback ke audio RDP.</div>
     </div>
 
     <div class="panel">
@@ -160,9 +163,9 @@
       <div class="two">
         <div><label>Jalur akses</label>
           <select id="fAkses">
-            <option value="keduanya" selected>Keduanya (RustDesk + tunnel)</option>
-            <option value="rustdesk">RustDesk saja</option>
-            <option value="tunnel">Tunnel RDP saja</option>
+            <option value="keduanya" selected>Keduanya (tunnel XyDesk + RustDesk)</option>
+            <option value="tunnel">Tunnel RDP saja (XyDesk/mstsc)</option>
+            <option value="rustdesk">RustDesk saja (cadangan)</option>
           </select></div>
         <div><label>Provider tunnel</label>
           <select id="fProv">
@@ -180,8 +183,9 @@
         <button class="danger" id="bStop" style="flex:1">MATIKAN</button>
       </div>
       <div class="note" id="opNote"></div>
-      <div class="hint">Satu sesi aktif; permintaan baru otomatis mengantre. Saat sesi berakhir: jalur akses dimatikan,
-        status dibersihkan, dan run lama dihapus otomatis.</div>
+      <div class="hint">Jalur utama dari HP = <b>tunnel</b> (dipakai app <b>XyDesk Remote</b> lewat Host+Port di panel
+        Koneksi, sekaligus untuk <code>mstsc</code>). RustDesk hanya cadangan. Satu sesi aktif; permintaan baru
+        otomatis mengantre. Saat sesi berakhir: jalur akses dimatikan, status dibersihkan, run lama dihapus otomatis.</div>
     </div>
 
     <div class="panel">
@@ -214,7 +218,9 @@
         <span class="v"><label class="switch"><input type="checkbox" id="exWin10"><i></i></label></span></div>
       <div class="row"><span class="k">Label "Windows 10 Pro"</span>
         <span class="v"><label class="switch"><input type="checkbox" id="exBadge"><i></i></label></span></div>
-      <label style="margin-top:16px">Aplikasi</label>
+      <label style="margin-top:16px">Host &amp; aplikasi</label>
+      <div class="row"><span class="k">XyDesk host <small>(AVC444 + ClearType + audio)</small></span>
+        <span class="v"><label class="switch"><input type="checkbox" id="exXy"><i></i></label></span></div>
       <div class="row"><span class="k">Lightshot</span>
         <span class="v"><label class="switch"><input type="checkbox" id="exLs"><i></i></label></span></div>
       <div class="btns"><button id="exSave" style="flex:1">SIMPAN</button></div>
@@ -241,7 +247,7 @@
 <script>
 (function(){
   var $=function(id){return document.getElementById(id)},
-      cfg={}, authed=false, lastRun=null, passShown=false, stopArmed=0, t0=null, t1=null, wpData=null;
+      cfg={}, authed=false, lastRun=null, passShown=false, stopArmed=0, t0=null, t1=null, wpData=null, cTunRaw='';
 
   function flash(msg){var f=$('flash');f.textContent=msg;f.classList.add('show');
     clearTimeout(f._t);f._t=setTimeout(function(){f.classList.remove('show')},2400)}
@@ -287,6 +293,7 @@
     if(e.translucent)s.push('translucent:'+(lbl[e.translucent]||e.translucent));
     if(e.wallpaper)s.push('wallpaper:'+(lbl[e.wallpaper]||e.wallpaper)+(e.wallpaper_file?(' '+e.wallpaper_file):''));
     if(g.win10&&g.win10.look)s.push('win10:'+(lbl[g.win10.look]||g.win10.look)+(g.win10.badge==='ok'?'+label':''));
+    if(g.xydesk&&g.xydesk.host)s.push('xydesk:'+(lbl[g.xydesk.host]||g.xydesk.host)+(g.xydesk.avc444==='ok'?'+avc444':''));
     s.push('admin:'+(e.admin===true?'YA':(e.admin===false?'TIDAK':'-')));
     return s.join(' · ')||'-'
   }
@@ -311,13 +318,14 @@
       $('stExtras').textContent=extrasText(g);
       // --- akses: RustDesk + tunnel ---
       var a=g&&g.akses?g.akses:null;
-      var modeTxt={keduanya:'RustDesk + tunnel RDP',rustdesk:'RustDesk',tunnel:'Tunnel RDP'};
+      var modeTxt={keduanya:'Tunnel (XyDesk/mstsc) + RustDesk',rustdesk:'RustDesk saja',tunnel:'Tunnel RDP saja'};
       $('cMode').textContent=a?(modeTxt[a.mode]||a.mode):'-';
       var rdId=a&&a.rustdesk?a.rustdesk.id:'';
       $('cRdId').textContent=(rdId?rdId:'-');
       $('cRdSrv').textContent=a&&a.rustdesk&&a.rustdesk.server?a.rustdesk.server:'server publik bawaan';
       var tun=a&&a.tunnel?a.tunnel.address:'';
       $('cTun').textContent=(tun?((a.tunnel.provider?a.tunnel.provider.toUpperCase()+' ':'')+tun):'-');
+      cTunRaw=tun;
       t0=st?Date.parse(st):null; t1=en?Date.parse(en):null; tickLeft();
       var key=(rdId||'')+'|'+(tun||'');
       if(g&&g.active&&key!=='|'&&key!==poll._key){poll._key=key;flash('Sesi aktif — RustDesk '+(rdId||'-')+' / tunnel '+(tun||'-'))}
@@ -368,7 +376,8 @@
       if(src==='cPassVal')txt=String(cfg.rdp_password||'');
       else if(src==='cUser')txt=$('cUser').textContent;
       else if(src==='cRdId')txt=$('cRdId').textContent;
-      else if(src==='cTun')txt=$('cTun').textContent.replace(/^\s*[A-Z]+\s+/,'');
+      else if(src==='cTunHost')txt=cTunRaw?cTunRaw.split(':')[0]:'';
+      else if(src==='cTunPort')txt=cTunRaw?cTunRaw.split(':')[1]:'';
       function done(){b.textContent='TERSALIN';setTimeout(function(){b.textContent='SALIN'},1200)}
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done)}
       else{var t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);
@@ -395,6 +404,7 @@
       $('exLs').checked=!!c.config.lightshot;
       $('exWin10').checked=c.config.win10_look!==false;
       $('exBadge').checked=c.config.win10_badge!==false;
+      $('exXy').checked=c.config.xydesk_host!==false;
       if(c.config.wallpaper){
         var im=$('wpPrev');im.src=c.wallpaper_url;im.classList.remove('hidden');$('wpDropTxt').classList.add('hidden');
         $('exPill').textContent='wallpaper aktif';$('exPill').className='pill';
@@ -454,7 +464,8 @@
   $('exSave').addEventListener('click',function(){
     var b=this;b.disabled=true;exNote('Menyimpan...');
     api('/extras','POST',{translucent:$('exTrans').checked,translucent_mode:$('exMode').value,
-      lightshot:$('exLs').checked,win10_look:$('exWin10').checked,win10_badge:$('exBadge').checked})
+      lightshot:$('exLs').checked,win10_look:$('exWin10').checked,win10_badge:$('exBadge').checked,
+      xydesk_host:$('exXy').checked})
       .then(function(){exNote('Tersimpan — berlaku otomatis di sesi berikutnya','ok');flash('Pengaturan tersimpan');loadExtras()})
       .catch(function(e){exNote('Gagal: '+e.message,'bad')})
       .finally(function(){b.disabled=false})

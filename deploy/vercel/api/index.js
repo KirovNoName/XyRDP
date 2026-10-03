@@ -23,7 +23,7 @@ const API = 'https://api.github.com';
 
 // ---- konfigurasi ekstra (assets/rdp-extras.json di repo) + wallpaper ----
 const EXTRAS_PATH = 'assets/rdp-extras.json';
-const EXTRAS_DEFAULTS = { lightshot: true, translucent: true, translucent_mode: 'clear', wallpaper: true, wallpaper_file: 'wallpaper.jpg', win10_look: true, win10_badge: true, win10_wallpaper: true };
+const EXTRAS_DEFAULTS = { lightshot: true, translucent: true, translucent_mode: 'clear', wallpaper: true, wallpaper_file: 'wallpaper.jpg', win10_look: true, win10_badge: true, win10_wallpaper: true, xydesk_host: true };
 const WALLPAPER_RE = /^wallpaper\.(jpg|jpeg|png|bmp)$/i;
 
 async function readRepoFile(path) {
@@ -271,7 +271,7 @@ module.exports = async (req, res) => {
       const body = await readBody(req);
       const { json: cur, sha } = await readRepoFile(EXTRAS_PATH);
       const next = Object.assign({}, EXTRAS_DEFAULTS, cur || {});
-      for (const k of ['lightshot', 'translucent', 'wallpaper', 'win10_look', 'win10_badge', 'win10_wallpaper']) {
+      for (const k of ['lightshot', 'translucent', 'wallpaper', 'xydesk_host', 'win10_look', 'win10_badge', 'win10_wallpaper']) {
         if (k in body) next[k] = !!body[k];
       }
       if (body.translucent_mode) {

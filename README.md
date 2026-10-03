@@ -1,17 +1,18 @@
 # XyRDP v2 — Windows "gaya 10" RDP 6 Jam via GitHub Actions
-### tanpa Tailscale · tanpa self-host · akses lewat RustDesk + tunnel RDP
+### tanpa Tailscale · tanpa self-host · **diakses dari HP pakai klien XyDesk Remote**
 
 RDP Windows **gratis** pakai runner `windows-2022` GitHub Actions, diakses
-**tanpa VPN dan tanpa server sendiri**: jalur 1 lewat **RustDesk** (relay publik
-RustDesk, cukup unduh kliennya), jalur 2 lewat **tunnel TCP** ke port 3389
-(**bore.pub** tanpa akun, atau **ngrok** pakai token gratis) untuk
-**Remote Desktop Connection (`mstsc`)** biasa. Sesi ditahan sampai durasi
+**tanpa VPN dan tanpa server sendiri** — jalur utama dari HP:
+**XyDesk Remote** (APK FreeRDP kamu) lewat **tunnel TCP** ke port 3389
+(**bore.pub** tanpa akun, atau **ngrok** pakai token gratis).
+**RustDesk** disediakan sebagai jalur **cadangan**. Sesi ditahan sampai durasi
 (maks 6 jam = batas keras job GitHub), lalu VM musnah sendiri.
 
 ```
-[PC kamu] --RustDesk (relay publik)---------> [Windows Server 2022 @ GitHub runner]
-[PC kamu] --mstsc -> bore.pub:PORT ---------> [port 3389, hanya lewat tunnel]
-                                                └─ user xyadmin (admin penuh)
+[HP: XyDesk Remote] --Host+Port--> bore.pub:PORT --> [Windows Server 2022 @ GitHub runner]
+[PC: RustDesk/cadangan] ------relay publik-------->      └─ port 3389 + host setup XyDesk
+                                                            (AVC444 · ClearType · audio/mic)
+                                                            └─ user xyadmin (admin penuh)
 ```
 
 ---
@@ -54,8 +55,8 @@ Semua tweak bisa dimatikan: input workflow **`win10: tidak`**, atau toggle
 
 | Jalur | Cara pakai di sisimu | Butuh akun? |
 |---|---|---|
-| **RustDesk** | Unduh klien gratis di [rustdesk.com/download](https://rustdesk.com/download) → masukkan **RustDesk ID** + **password** dari dashboard | **Tidak** — relay publik bawaan (`rs-ny/rs-sg.rustdesk.com`) |
-| **Tunnel RDP** | **Remote Desktop Connection** (`mstsc`) → alamat `bore.pub:<port>` dari dashboard → login `xyadmin` + password | **Tidak** (bore.pub) · ngrok pakai token akun gratis |
+| **Tunnel RDP** → **XyDesk Remote (HP)** / `mstsc` | Di app: mode **Koneksi RDP Penuh** → Host = `bore.pub` (atau `x.tcp.ngrok.io`), Port = angka dari dashboard → login `xyadmin` + password. Di PC: Remote Desktop Connection ke alamat yang sama | **Tidak** (bore.pub) · ngrok pakai token akun gratis |
+| **RustDesk** (cadangan) | Unduh klien gratis di [rustdesk.com/download](https://rustdesk.com/download) → masukkan **RustDesk ID** + **password** dari dashboard | **Tidak** — relay publik bawaan (`rs-ny/rs-sg.rustdesk.com`) |
 
 Detail di `scripts/setup-akses.ps1`:
 - **RustDesk**: install via `winget` (fallback installer GitHub releases),
@@ -68,6 +69,33 @@ Detail di `scripts/setup-akses.ps1`:
   `ngrok tcp 3389` (butuh secret `NGROK_AUTHTOKEN`). Proses berjalan selama sesi,
   dibunuh di step Finalize. **serveo.net tidak dipakai** karena tunnel TCP
   gratisnya hanya bertahan 10 menit (tidak cocok untuk sesi 6 jam).
+
+### Khusus XyDesk Remote (klien yang kamu pakai dari HP)
+
+Hasil penelusuran repo `xykal/XyDesk-Remote` (v0.5.34) yang dipakai di sini:
+
+- Klien XyDesk punya **dua mode**: **Koneksi RDP Penuh** (Host + Port + domain +
+  RD Gateway + SSH tunneling + WoL) dan **Koneksi PC (ID 10-digit & Password)**
+  yang masih **Tahap Pengembangan/Experimental** (butuh `XyDeskRemoteHost.exe`
+  + QUIC UDP 4433). Artinya jalur yang bisa dipakai dari runner GitHub sekarang
+  adalah **mode RDP Penuh**, dan struktur `ConnectionProfile(host, port = 3389)`
+  klien menerima **host + port bebas** → **tunnel TCP langsung cocok**, tanpa
+  diubah apa pun di sisi klien.
+- `scripts/setup-xydesk.ps1` = versi **inline** dari `rdp.xydesk.my.id/host.ps1`
+  (v0.5.34) yang dulu diambil lewat internet. Isinya: RDP multi-session
+  (`fSingleSessionPerUser=0`), **audio out + mic** hidup, kebijakan **AVC444
+  4:4:4** + hardware encode + VGAdapter, **font smoothing yang benar**
+  (`fNoFontSmoothing=0` + `AllowFontAntiAlias=1` di `WinStations\RDP-Tcp` —
+  kunci yang *benar-benar* dibaca Windows, temuan commit XyDesk-Remote v0.5.30),
+  dan firewall **TCP/UDP 3389 + UDP 4433**.
+- **Batas yang jujur**: **audio bridge QUIC XyDesk (UDP 4433) tidak bisa lewat
+  tunnel TCP** — relay TCP hanya meneruskan TCP. Port UDP-nya tetap dibuka di VM
+  (siap kalau HP reach UDP langsung, mis. LAN/tailnet), dan klien akan gagal
+  probe QUIC lalu **otomatis fallback ke audio RDP** (suara tetap ada).
+  Mic HP → PC lewat QUIC juga tidak tersedia di jalur tunnel.
+- Sertifikat RDP VM sekali-pakai → kalau klien menanyakan sertifikat, terima saja.
+- Skala layar: klienmu sudah dikembalikan default **100%** (v0.5.30); kalau di
+  sesi ini Windows memaksa 125%, teks bisa terlihat pecah — jaga di 100%.
 
 > Catatan keamanan: tunnel membuat **port 3389 VM terbuka ke internet** selama
 > sesi. Rem-nya: password panjang (`RDP_PASSWORD`) + NLA Windows. VM ini juga
@@ -84,6 +112,7 @@ Detail di `scripts/setup-akses.ps1`:
 | `scripts/lib-common.ps1` | Helper bersama: logger, registry, hive profil Default, pembaca status, unduhan |
 | `scripts/setup-rdp.ps1` | User admin + RDP 3389 + tulis status awal |
 | `scripts/setup-win10.ps1` | **Tweak "Windows 10 look"** (Server Manager, personalisasi, wallpaper, label) |
+| `scripts/setup-xydesk.ps1` | **Host setup XyDesk Remote** (AVC444 + ClearType + multi-session + audio/mic + UDP 4433) |
 | `scripts/setup-akses.ps1` | **RustDesk + tunnel RDP** (pengganti Tailscale) |
 | `scripts/setup-extras.ps1` | Lightshot + TranslucentTB + wallpaper (dari `assets/`) |
 | `scripts/keepalive.ps1` | Penahan sesi + heartbeat tiap 5 menit + publish status tiap 30 menit |
@@ -96,8 +125,11 @@ Detail di `scripts/setup-akses.ps1`:
 | `deploy/vercel/` | Dashboard versi hosting (catch-all function + login cookie) |
 
 Yang **dihapus** dari versi lama: seluruh integrasi Tailscale (auth key, MagicDNS,
-hapus node via API/OAuth), XyDesk host (`rdp.xydesk.my.id/host.ps1`), XyDesk ID,
-dan input `exit_node`.
+hapus node via API/OAuth) dan input `exit_node`.
+**XyDesk host dikembalikan** — bukan lagi dengan mengambil `host.ps1` dari
+internet, tapi **inline di repo** (`scripts/setup-xydesk.ps1`) supaya tidak
+bergantung pada domain luar. "XyDesk ID" (turunan IP) tetap dibuang karena mode
+ID 10-digit masih Experimental dan tidak dipakai jalur tunnel.
 
 ---
 
@@ -112,9 +144,11 @@ dan input `exit_node`.
    (Manual: Actions → “XyRDP - Windows 10 Style RDP 6 Jam” → Run workflow.)
 3. Tunggu **±3–5 menit** sampai status **AKTIF**. Panel **Koneksi** akan
    menampilkan **RustDesk ID** dan **alamat tunnel** (mis. `bore.pub:47321`).
-4. Masuk dengan salah satu:
-   - **RustDesk**: buka klien → masukkan **ID** → password → Connect.
-   - **RDP**: `mstsc` → alamat tunnel → login `xyadmin` + password.
+4. Masuk dari HP dengan **XyDesk Remote** → **Koneksi RDP Penuh** →
+   **Host** = bagian sebelum `:` dari alamat tunnel (mis. `bore.pub`),
+   **Port** = angkanya (mis. `47321`) → login `xyadmin` + password.
+   Dari PC: **Remote Desktop Connection** ke alamat tunnel yang sama.
+   RustDesk (kalau dipilih) tinggal masukkan **ID** + password yang sama.
 5. Sesi mati sendiri mendekati jam ke-6. Mau mati sekarang → tombol **MATIKAN**.
 
 ---
@@ -146,6 +180,7 @@ Input workflow (`Run workflow`):
 | `akses` | `keduanya` (default) · `rustdesk` · `tunnel` |
 | `tunnel_provider` | `otomatis` · `bore` · `ngrok` |
 | `win10` | `ya` (default) / `tidak` — tweak tampilan Windows 10 |
+| `xydesk` | `ya` (default) / `tidak` — host setup XyDesk (AVC444 + ClearType + audio + UDP 4433) |
 | `ekstra` | `ya` (default) / `tidak` — Lightshot + wallpaper + taskbar translucent |
 | `wallpaper_url` | URL wallpaper sendiri (jpg/png/bmp); kosong = `assets/wallpaper*` |
 | `rd_server` | *(lanjutan)* server RustDesk sendiri/terdekat, mis. `rs-sg.rustdesk.com`; kosong = server publik |
@@ -247,3 +282,7 @@ tunnel dikosongkan** dari file publik (tidak ada endpoint nyangkut di branch
 | Label "Windows 10 Pro" | Kosmetik (registry). `winver`/About bisa tetap menampilkan nama Server — branding Windows di folder `branding` milik TrustedInstaller, tidak diubah |
 | Log `butuh secret CLEANUP_TOKEN` | Tanpa PAT scope `repo`, run lama tidak bisa dihapus (GITHUB_TOKEN Actions cuma `actions:read`) |
 | Mencari "Tailscale" di repo | Sudah dihapus sepenuhnya di v2 — lihat §3 |
+| XyDesk: teks di sesi tampak pecah | Pastikan skala Windows **100%** (klien v0.5.30 default 100%) dan `xydesk=ya` (font smoothing aktif); cek log step "Host setup XyDesk" |
+| XyDesk: tidak ada suara dari PC | Lewat tunnel TCP, audio lewat kanal RDP biasa — pastikan `Audiosrv` jalan (dicek di setup-xydesk) dan audio tidak di-mute di klien. QUIC UDP 4433 hanya untuk LAN/jalur UDP |
+| XyDesk: "Direct QUIC" tidak aktif | Wajar di jalur tunnel (UDP 4433 tidak lewat relay TCP) — sesi tetap jalan lewat RDP; QUIC hanya untuk Koneksi PC (ID) yang masih Experimental |
+| XyDesk: sertifikat RDP ditanya | Terima saja — VM sekali-pakai, sertifikatnya dibuat ulang tiap sesi |

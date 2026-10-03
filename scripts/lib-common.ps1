@@ -47,6 +47,7 @@ $script:XyCfgDefaults = [ordered]@{
   win10_look       = $true            # semua tweak tampilan Windows 10
   win10_badge      = $true            # label "Windows 10 Pro" di registry (kosmetik)
   win10_wallpaper  = $true            # pakai wallpaper gaya Windows 10
+  xydesk_host      = $true            # host setup untuk klien XyDesk Remote (AVC444/ClearType/audio)
 }
 
 function Get-CfgBool([object]$o, [string]$n, [bool]$d) {
@@ -76,7 +77,7 @@ function Get-Cfg {
     $c | Add-Member -NotePropertyName $k -NotePropertyValue $script:XyCfgDefaults[$k] -Force
   }
   if ($j) {
-    foreach ($k in @('lightshot','translucent','wallpaper','win10_look','win10_badge','win10_wallpaper')) {
+    foreach ($k in @('lightshot','translucent','wallpaper','win10_look','win10_badge','win10_wallpaper','xydesk_host')) {
       $c.$k = Get-CfgBool $j $k $c.$k
     }
     $c.translucent_mode = (Get-CfgStr $j 'translucent_mode' $c.translucent_mode).ToLower()

@@ -102,7 +102,7 @@ async function readLog(runId) {
 
 // ---- konfigurasi ekstra (assets/rdp-extras.json di repo) + wallpaper ----
 const EXTRAS_PATH = 'assets/rdp-extras.json';
-const EXTRAS_DEFAULTS = { lightshot: true, translucent: true, translucent_mode: 'clear', wallpaper: true, wallpaper_file: 'wallpaper.jpg', win10_look: true, win10_badge: true, win10_wallpaper: true };
+const EXTRAS_DEFAULTS = { lightshot: true, translucent: true, translucent_mode: 'clear', wallpaper: true, wallpaper_file: 'wallpaper.jpg', win10_look: true, win10_badge: true, win10_wallpaper: true, xydesk_host: true };
 const WALLPAPER_RE = /^wallpaper\.(jpg|jpeg|png|bmp)$/i;
 
 async function readRepoFile(path) {
@@ -243,7 +243,7 @@ async function handle(req, res) {
       const p = JSON.parse(body || '{}');
       const { json: cur, sha } = await readRepoFile(EXTRAS_PATH);
       const next = Object.assign({}, EXTRAS_DEFAULTS, cur || {});
-      for (const k of ['lightshot', 'translucent', 'wallpaper']) {
+      for (const k of ['lightshot', 'translucent', 'wallpaper', 'xydesk_host']) {
         if (k in p) next[k] = !!p[k];
       }
       for (const k of ['win10_look', 'win10_badge', 'win10_wallpaper']) {

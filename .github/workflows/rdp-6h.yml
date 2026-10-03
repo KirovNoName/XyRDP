@@ -68,6 +68,14 @@ on:
         options:
           - "ya"
           - "tidak"
+      xydesk:
+        description: "Host setup XyDesk Remote (AVC444 + ClearType + multi-session + audio/mic + UDP 4433)"
+        required: false
+        default: "ya"
+        type: choice
+        options:
+          - "ya"
+          - "tidak"
       ekstra:
         description: "Ekstra otomatis: Lightshot + wallpaper + taskbar translucent"
         required: false
@@ -110,6 +118,7 @@ jobs:
       AKSES: ${{ inputs.akses }}
       TUNNEL_PROVIDER: ${{ inputs.tunnel_provider }}
       WIN10: ${{ inputs.win10 }}
+      XYDESK: ${{ inputs.xydesk }}
       EXTRAS: ${{ inputs.ekstra }}
       WALLPAPER_URL: ${{ inputs.wallpaper_url }}
       RD_SERVER: ${{ inputs.rd_server }}
@@ -143,6 +152,11 @@ jobs:
         if: ${{ inputs.win10 != 'tidak' }}
         shell: pwsh
         run: ./scripts/setup-win10.ps1
+
+      - name: Host setup XyDesk Remote (AVC444 + ClearType + audio/mic + UDP 4433)
+        if: ${{ inputs.xydesk != 'tidak' }}
+        shell: pwsh
+        run: ./scripts/setup-xydesk.ps1
 
       - name: Setup ekstra (Lightshot + wallpaper + taskbar translucent)
         if: ${{ inputs.ekstra != 'tidak' }}
