@@ -6,16 +6,21 @@
 #  mematikan sesi (exit 0) — web dashboard masih bisa baca IP dari log run.
 #  File TIDAK berisi password.
 # ============================================================================
-param([bool]$Active = $true)
+# [string] + koersi: supaya aman dipanggil baik sebagai `-Active $false` (blok pwsh)
+# maupun lewat `pwsh -File ... -Active false` (argumen masuk sebagai string).
+param([string]$Active = 'true')
+$isActive = -not (@('false', '0', 'no', 'tidak', 'off', '') -contains ("$Active".Trim().ToLower()))
 $ErrorActionPreference = 'Continue'
 function Log([string]$m) { Write-Host "[XyRDP:status] $m" }
 
 $repo = $env:GITHUB_REPOSITORY
-$src  = Join-Path $env:GITHUB_WORKSPACE 'out\rdp-status.json'
+# lokasi repo: Actions -> GITHUB_WORKSPACE, di luar Actions -> folder induk script
+$ws   = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
+$src  = Join-Path $ws 'out\rdp-status.json'
 if (-not (Test-Path $src)) { Log "tidak ada $src — skip"; exit 0 }
 
 $json = Get-Content $src -Raw | ConvertFrom-Json
-if (-not $Active) {
+if (-not $isActive) {
   $json | Add-Member -NotePropertyName stopped_at -NotePropertyValue (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') -Force
   $json.active = $false
   # sesi mati -> jangan tinggalkan endpoint koneksi di file publik (branch status)
@@ -52,6 +57,7 @@ try {
   $ref = GH 'GET' "/repos/$repo/git/ref/heads/status" $null
   if (-not $ref) {
     $db   = (GH 'GET' "/repos/$repo" $null).default_branch
+    if (-not $db) { throw 'default branch tidak diketahui (token tidak valid / tanpa scope repo?)' }
     $sha0 = (GH 'GET' "/repos/$repo/git/ref/heads/$db" $null).object.sha
     if (-not $sha0) { throw "default branch sha tidak diketahui" }
     GH 'POST' "/repos/$repo/git/refs" @{ ref = 'refs/heads/status'; sha = $sha0 } | Out-Null

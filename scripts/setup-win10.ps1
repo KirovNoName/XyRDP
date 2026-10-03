@@ -95,7 +95,7 @@ function Get-Win10WallpaperFile {
   if ($cfg.win10_wallpaper) { $names += @('wallpaper-win10.jpg', 'wallpaper-win10.png') }
   $names += @($cfg.wallpaper_file, 'wallpaper.jpg', 'wallpaper.jpeg', 'wallpaper.png', 'wallpaper.bmp')
   foreach ($n in $names) {
-    $p = Join-Path $env:GITHUB_WORKSPACE "assets\$n"
+    $p = Join-Path (Get-Workspace) "assets\$n"
     if (Test-Path $p) { return $p }
   }
   if ($env:GITHUB_REPOSITORY) {

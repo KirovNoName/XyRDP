@@ -67,7 +67,7 @@ $status = [ordered]@{
   mode           = 'bersih+win10'
   akses          = @{ mode = if ($env:AKSES) { $env:AKSES } else { 'keduanya' }; rustdesk = @{ status = 'pending' }; tunnel = @{ status = 'pending' } }
 }
-$outDir = Join-Path $env:GITHUB_WORKSPACE 'out'
+$outDir = Join-Path (Get-Workspace) 'out'
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 $status | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 -Path (Join-Path $outDir 'rdp-status.json')
 $now.ToString('s') | Set-Content -Path (Join-Path $outDir 'started.txt')

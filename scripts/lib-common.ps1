@@ -65,7 +65,7 @@ function Get-CfgStr([object]$o, [string]$n, [string]$d) {
 # Get-Cfg -> pscustomobject berisi semua setting (default + isi repo)
 function Get-Cfg {
   $j = $null
-  $path = if ($env:GITHUB_WORKSPACE) { Join-Path $env:GITHUB_WORKSPACE 'assets\rdp-extras.json' } else { Join-Path $PSScriptRoot '..\assets\rdp-extras.json' }
+  $path = Join-Path (Get-Workspace) 'assets\rdp-extras.json'
   if (Test-Path $path) {
     try { $j = Get-Content $path -Raw | ConvertFrom-Json; Log 'konfigurasi: assets/rdp-extras.json' }
     catch { Log "rdp-extras.json tidak terbaca ($($_.Exception.Message)) — pakai default" }
@@ -85,10 +85,15 @@ function Get-Cfg {
   return $c
 }
 
+# ---------- lokasi repo (Actions: GITHUB_WORKSPACE, lokal: folder script/..) ----------
+function Get-Workspace {
+  if ($env:GITHUB_WORKSPACE) { return $env:GITHUB_WORKSPACE }
+  return (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+}
+
 # ---------- status file (out/rdp-status.json) ----------
 function Get-StatusPath {
-  if ($env:GITHUB_WORKSPACE) { return (Join-Path $env:GITHUB_WORKSPACE 'out\rdp-status.json') }
-  return (Join-Path $PSScriptRoot '..\out\rdp-status.json')
+  return (Join-Path (Get-Workspace) 'out\rdp-status.json')
 }
 
 function Read-Status {

@@ -196,7 +196,7 @@ if ($cfg.wallpaper) {
   if (-not $wpFile) {
     $repoFile = $null
     foreach ($cand in @("$($cfg.wallpaper_file)", 'wallpaper.jpg', 'wallpaper.jpeg', 'wallpaper.png', 'wallpaper.bmp')) {
-      $p = Join-Path $env:GITHUB_WORKSPACE "assets\$cand"
+      $p = Join-Path (Get-Workspace) "assets\$cand"
       if (Test-Path $p) { $repoFile = $p; break }
     }
     if ($repoFile) {
@@ -242,7 +242,9 @@ try {
     $rdpMembers = @()
     try { $rdpMembers = Get-LocalGroupMember -Group 'Remote Desktop Users' | ForEach-Object { ($_.Name -split '\\')[-1] } } catch {}
     $adminOk = ($members -contains $u)
-    Log ("  user '{0}' ada: YA | Administrators: {1} | Remote Desktop Users: {2}" -f $u, (if ($adminOk) { 'YA' } else { 'TIDAK' }), (if ($rdpMembers -contains $u) { 'YA' } else { 'TIDAK' }))
+    $adminTxt = $(if ($adminOk) { 'YA' } else { 'TIDAK' })
+    $rdpTxt   = $(if ($rdpMembers -contains $u) { 'YA' } else { 'TIDAK' })
+    Log ("  user '{0}' ada: YA | Administrators: {1} | Remote Desktop Users: {2}" -f $u, $adminTxt, $rdpTxt)
     $lf = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'LocalAccountTokenFilterPolicy' -ErrorAction SilentlyContinue).LocalAccountTokenFilterPolicy
     Log "  LocalAccountTokenFilterPolicy = $lf (1 = token admin penuh untuk sesi jaringan/RDP)"
   } else { Log '  user/grup tidak ditemukan (harusnya dibuat setup-rdp.ps1)' }
@@ -259,5 +261,6 @@ Update-Status @{ extras = [ordered]@{
 
 Close-DefaultHive
 
-Log ("SELESAI — lightshot={0} translucent={1} wallpaper={2} admin={3}" -f $resLightshot, $resTrans, $resWall, (if ($adminOk) { 'YA' } else { 'TIDAK' }))
+$adminTxt = $(if ($adminOk) { 'YA' } else { 'TIDAK' })
+Log ("SELESAI — lightshot={0} translucent={1} wallpaper={2} admin={3}" -f $resLightshot, $resTrans, $resWall, $adminTxt)
 exit 0
