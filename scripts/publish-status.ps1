@@ -14,6 +14,9 @@ $ErrorActionPreference = 'Continue'
 function Log([string]$m) { Write-Host "[XyRDP:status] $m" }
 
 $repo = $env:GITHUB_REPOSITORY
+# branch tujuan status (default 'status'); bisa diganti lewat env STATUS_BRANCH
+# supaya run validasi/paralel tidak menimpa status sesi utama.
+$statusBranch = if ($env:STATUS_BRANCH) { $env:STATUS_BRANCH.Trim() } else { 'status' }
 # lokasi repo: Actions -> GITHUB_WORKSPACE, di luar Actions -> folder induk script
 $ws   = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
 $src  = Join-Path $ws 'out\rdp-status.json'
@@ -54,18 +57,18 @@ function GH([string]$method, [string]$apiPath, $body) {
 
 # ---- cara 1: Contents API ----
 try {
-  $ref = GH 'GET' "/repos/$repo/git/ref/heads/status" $null
+  $ref = GH 'GET' "/repos/$repo/git/ref/heads/$statusBranch" $null
   if (-not $ref) {
     $db   = (GH 'GET' "/repos/$repo" $null).default_branch
     if (-not $db) { throw 'default branch tidak diketahui (token tidak valid / tanpa scope repo?)' }
     $sha0 = (GH 'GET' "/repos/$repo/git/ref/heads/$db" $null).object.sha
     if (-not $sha0) { throw "default branch sha tidak diketahui" }
-    GH 'POST' "/repos/$repo/git/refs" @{ ref = 'refs/heads/status'; sha = $sha0 } | Out-Null
-    Log "branch 'status' dibuat (via API)"
+    GH 'POST' "/repos/$repo/git/refs" @{ ref = "refs/heads/$statusBranch"; sha = $sha0 } | Out-Null
+    Log "branch '$statusBranch' dibuat (via API)"
   }
   $b64  = [Convert]::ToBase64String([IO.File]::ReadAllBytes($src))
-  $body = @{ message = "XyRDP status update (run $($env:GITHUB_RUN_NUMBER))"; content = $b64; branch = 'status' }
-  $cur  = GH 'GET' "/repos/$repo/contents/rdp-status.json?ref=status" $null
+  $body = @{ message = "XyRDP status update (run $($env:GITHUB_RUN_NUMBER))"; content = $b64; branch = $statusBranch }
+  $cur  = GH 'GET' "/repos/$repo/contents/rdp-status.json?ref=$statusBranch" $null
   if ($cur -and $cur.sha) { $body.sha = $cur.sha }
   $res = GH 'PUT' "/repos/$repo/contents/rdp-status.json" $body
   if ($res -and $res.content) { Log "Contents API OK (commit $($res.commit.sha.Substring(0,7)))" } else { throw "PUT contents tidak mengembalikan hasil" }
@@ -76,7 +79,7 @@ function Verify-Published {
   for ($i = 0; $i -lt 6; $i++) {
     Start-Sleep -Seconds 5
     try {
-      $r = Invoke-RestMethod "https://raw.githubusercontent.com/$repo/status/rdp-status.json?r=$i$((Get-Date).Minute)" -TimeoutSec 10
+      $r = Invoke-RestMethod "https://raw.githubusercontent.com/$repo/$statusBranch/rdp-status.json?r=$i$((Get-Date).Minute)" -TimeoutSec 10
       if ($r -and "$($r.run_id)" -eq "$($env:GITHUB_RUN_ID)") { return $true }
     } catch {}
   }
@@ -98,14 +101,14 @@ if (-not (Verify-PublishedAPI) -and -not (Verify-Published)) {
   Log "verifikasi belum lolos — coba fallback git push..."
   $tmp = Join-Path $env:RUNNER_TEMP ("xyrdpstatus-" + (Get-Random -Maximum 999999))
   try {
-    git init -q -b status $tmp | Out-Null
+    git init -q -b $statusBranch $tmp | Out-Null
     Copy-Item $src (Join-Path $tmp 'rdp-status.json') -Force
     Push-Location $tmp
     git config user.name  "github-actions[bot]" | Out-Null
     git config user.email "41898282+github-actions[bot]@users.noreply.github.com" | Out-Null
     git add rdp-status.json
     git -c commit.gpgsign=false commit -q -m "XyRDP status update" | Out-Null
-    $out = git -c "http.extraHeader=Authorization: Bearer $env:GITHUB_TOKEN" push --force "https://github.com/$repo.git" "HEAD:refs/heads/status" 2>&1
+    $out = git -c "http.extraHeader=Authorization: Bearer $env:GITHUB_TOKEN" push --force "https://github.com/$repo.git" "HEAD:refs/heads/$statusBranch" 2>&1
     $out | ForEach-Object { Log "git: $_" }
     Pop-Location
   } catch {
@@ -115,7 +118,7 @@ if (-not (Verify-PublishedAPI) -and -not (Verify-Published)) {
 }
 
 if (Verify-Published) {
-  Log "OK — rdp-status.json (active=$($json.active)) live: https://raw.githubusercontent.com/$repo/status/rdp-status.json"
+  Log "OK — rdp-status.json (active=$($json.active)) live: https://raw.githubusercontent.com/$repo/$statusBranch/rdp-status.json"
 } else {
   Log "status belum terverifikasi via raw (cache bisa telat s/d 5 menit; web pakai fallback API + parser log). Sesi TETAP jalan."
 }
