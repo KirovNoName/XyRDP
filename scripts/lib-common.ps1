@@ -237,6 +237,95 @@ function Get-PrimaryIPv4 {
   return '0.0.0.0'
 }
 
+# ---------------------------------------------------------------------------
+#  Kesiapan RDP (pelajaran validasi 2026-10-03 di runner nyata):
+#   - "port 3389 LISTENING" TIDAK cukup: listener sempat hilang ~2 menit
+#     setelah tweak XyDesk, dan koneksi ke 127.0.0.1 bisa ditolak sementara
+#     IP utama VM menerima. Jadi kita tunggu sampai RDP benar-benar menjawab
+#     handshake X.224 sebelum tunnel diarahkan ke sana.
+# ---------------------------------------------------------------------------
+
+# semua alamat IPv4 non-loopback (kandidat alamat RDP lokal)
+function Get-LocalIPv4List {
+  $out = @()
+  try {
+    $out = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+             Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } |
+             Sort-Object -Property @{ Expression = { [int]$_.SkipAsSource } }, InterfaceIndex |
+             Select-Object -ExpandProperty IPAddress -Unique)
+  } catch {}
+  if (-not $out) { $out = @(Get-PrimaryIPv4) }
+  return $out
+}
+
+# ringkas keadaan listener 3389 (alamat + nama proses) untuk log
+function Get-RdpListenerState([int]$Port = 3389) {
+  try {
+    $l = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    if (-not $l) { return 'TIDAK ADA listener' }
+    $items = foreach ($x in $l) {
+      $pn = '?'; try { $pn = (Get-Process -Id $x.OwningProcess -ErrorAction Stop).ProcessName } catch {}
+      "$($x.LocalAddress):$($x.LocalPort) ($pn)"
+    }
+    return ($items -join ' | ')
+  } catch { return "error: $($_.Exception.Message)" }
+}
+
+# handshake RDP X.224 ke alamat:port -> @{ ok = bool; detail = teks }
+# (Connection Confirm = RDP benar-benar menerima koneksi, bukan cuma TCP terbuka)
+function Test-RdpHandshake([string]$Address, [int]$Port = 3389, [int]$TimeoutMs = 8000) {
+  $cr = [byte[]](0x03,0x00,0x00,0x13, 0x0e,0xe0,0x00,0x00,0x00,0x00,0x00,
+                 0x01,0x00,0x08,0x00,0x03,0x00,0x00,0x00)
+  try {
+    $c = New-Object System.Net.Sockets.TcpClient
+    if (-not $c.ConnectAsync($Address, $Port).Wait($TimeoutMs)) { $c.Close(); return @{ ok = $false; detail = 'timeout connect' } }
+    $ns = $c.GetStream()
+    $ns.Write($cr, 0, $cr.Length); $ns.Flush()
+    $c.ReceiveTimeout = $TimeoutMs
+    $buf = New-Object byte[] 64
+    $n = $ns.Read($buf, 0, $buf.Length)
+    $c.Close()
+    if ($n -ge 6 -and $buf[0] -eq 0x03 -and $buf[1] -eq 0x00 -and $buf[5] -in @(0xd0, 0xcf)) {
+      $hex = (($buf[0..([Math]::Min($n, 10) - 1)] | ForEach-Object { $_.ToString('x2') }) -join ' ')
+      return @{ ok = $true; detail = "X.224 Connection Confirm [$hex]" }
+    }
+    if ($n -gt 0) {
+      $hex = (($buf[0..($n - 1)] | ForEach-Object { $_.ToString('x2') }) -join ' ')
+      return @{ ok = $false; detail = "balasan $n byte non-confirm [$hex]" }
+    }
+    return @{ ok = $false; detail = 'koneksi ditutup tanpa data' }
+  } catch { return @{ ok = $false; detail = $_.Exception.Message } }
+}
+
+# tunggu sampai ADA alamat lokal yang menjawab handshake RDP; kembalikan alamat
+# itu (atau $null). Kalau lama tidak ada, TermService di-restart sekali.
+function Wait-RdpReady([int]$TimeoutSec = 240, [int]$Port = 3389) {
+  $deadline = (Get-Date).AddSeconds($TimeoutSec)
+  $restarted = $false
+  $lastState = ''
+  while ((Get-Date) -lt $deadline) {
+    $cands = @('127.0.0.1', '::1') + @(Get-LocalIPv4List) | Select-Object -Unique
+    foreach ($c in $cands) {
+      $r = Test-RdpHandshake $c $Port
+      if ($r.ok) { Log "  RDP SIAP di $c`:$Port — $($r.detail)"; return $c }
+    }
+    $st = Get-RdpListenerState $Port
+    if ($st -ne $lastState) { Log "  listener $Port : $st"; $lastState = $st }
+    $left = [int]($deadline - (Get-Date)).TotalSeconds
+    if (-not $restarted -and $left -gt 100) {
+      Log '  RDP belum menjawab handshake — restart TermService (paksa listener dibuat ulang)...'
+      try { Restart-Service TermService -Force -ErrorAction Stop; Log '  TermService sudah di-restart' }
+      catch { Log "  restart TermService gagal: $($_.Exception.Message)" }
+      $restarted = $true
+      Start-Sleep -Seconds 10
+    } else {
+      Start-Sleep -Seconds 8
+    }
+  }
+  Log "  RDP belum menjawab handshake setelah ${TimeoutSec}s"
+  return $null
+}
+
 # ---------- unduhan ----------
 function Get-File([string]$Url, [string]$OutFile, [int]$TimeoutSec = 180) {
   for ($i = 1; $i -le 3; $i++) {

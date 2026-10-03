@@ -112,6 +112,16 @@ if ($addr) {
 }
 Log '  catatan: audio bridge QUIC (UDP 4433) hanya jalan kalau HP reach UDP langsung; lewat tunnel TCP klien otomatis fallback ke audio RDP (suara tetap ada)'
 
+# ---------- 6b. Terapkan kebijakan ke TermService + verifikasi RDP benar-benar siap ----------
+# fSingleSessionPerUser & kebijakan TS baru aktif setelah TermService dibuat ulang.
+# Ini juga memindahkan "jeda" listener (yang terlihat di validasi 2026-10-03)
+# ke step ini, jadi setup-akses tinggal memakai RDP yang sudah terbukti menjawab.
+try { Restart-Service TermService -Force -ErrorAction Stop; Log '  TermService di-restart supaya kebijakan multi-sesi/grafis aktif' }
+catch { Log "  restart TermService: $($_.Exception.Message)" }
+$rdpReadyAt = Wait-RdpReady -TimeoutSec 120
+if ($rdpReadyAt) { Log "  RDP terverifikasi siap di $rdpReadyAt`:3389 (handshake X.224 OK)" }
+else { Log '  PERINGATAN: RDP belum menjawab handshake setelah tweak (setup-akses akan menunggu lagi)' }
+
 # ---------- 7. Status (apa adanya, bukan asumsi) ----------
 $allOk = $okDeny -and $okMulti -and $okAudio -and $okMic -and $okAvc -and $okAvc2 -and ($fontTxt -eq 'ok')
 Update-Status @{ xydesk = [ordered]@{
@@ -124,6 +134,7 @@ Update-Status @{ xydesk = [ordered]@{
     audio_mic     = if ($okMic) { 'ok' } else { 'gagal' }
     firewall      = "tcp3389=$fwTcp udp3389=$fwUdp udp4433=$fw4433"
     services      = $svcTxt
+    rdp_ready     = if ($rdpReadyAt) { "$rdpReadyAt (handshake OK)" } else { 'belum' }
     quic_udp4433  = 'dibuka di VM (tidak lewat tunnel TCP)'
     akses         = if ($addr) { $addr } else { '(menyusul)' }
     note          = if ($allOk) { 'Host siap dipakai klien XyDesk Remote mode Koneksi RDP (Host+Port tunnel)' }

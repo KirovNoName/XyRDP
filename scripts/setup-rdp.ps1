@@ -50,15 +50,12 @@ Enable-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyConti
 foreach ($svc in @('TermService')) {
   try { Set-Service -Name $svc -StartupType Automatic -ErrorAction SilentlyContinue; Start-Service -Name $svc -ErrorAction SilentlyContinue } catch {}
 }
-# tunggu port benar-benar mendengarkan (maks 60 detik) + catat buktinya
-$listen = 'belum'
-for ($i = 1; $i -le 20; $i++) {
-  try {
-    $f = Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction Stop | Select-Object -First 1
-    if ($f) { $listen = "ya ($($f.LocalAddress):$($f.LocalPort), pid $($f.OwningProcess))"; break }
-  } catch {}
-  Start-Sleep -Seconds 3
-}
+# tunggu sampai RDP BENAR-BENAR menjawab handshake X.224 (maks 120 detik).
+# "port LISTENING" saja tidak cukup: di runner nyata listener 3389 sempat hidup
+# lalu hilang/kosong ~2 menit setelah tweak XyDesk (validasi 2026-10-03).
+$rdpReadyAt = Wait-RdpReady -TimeoutSec 120
+$listen = Get-RdpListenerState 3389
+if ($rdpReadyAt) { $listen = "$listen + handshake ok via $rdpReadyAt" } else { $listen = "$listen + handshake BELUM OK" }
 try {
   $ns = (netstat -ano | Select-String ':3389' | Select-Object -First 3) -join ' | '
   Log "  netstat :3389 -> $ns"

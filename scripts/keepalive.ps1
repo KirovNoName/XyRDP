@@ -38,7 +38,23 @@ while ((Get-Date) -lt $stop) {
   $rdProc = 0
   try { $rdProc = @(Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue).Count } catch {}
 
-  Log "hidup • RustDesk=$rdId • tunnel=$tun • sesi RDP=$sess • proses RD=$rdProc • sisa=$left"
+  # kesehatan tunnel: handshake X.224 langsung ke endpoint publik (10 detik)
+  $tunHealth = ''
+  if ($tun -and $tun -match '^(?<h>[^:]+):(?<p>\d+)$') {
+    $hr = Test-RdpHandshake $Matches['h'] ([int]$Matches['p']) 10000
+    $tunHealth = if ($hr.ok) { 'ok' } else { 'gagal' }
+    # PENTING: Update-Status mengganti key level atas — jadi ambil objek akses
+    # utuh dulu, ubah selftest-nya, baru tulis balik (jangan kirim potongan).
+    $stNow = Read-Status
+    if ($stNow -and $stNow.akses -and $stNow.akses.tunnel) {
+      if ("$($stNow.akses.tunnel.selftest)" -ne $tunHealth) {
+        $stNow.akses.tunnel | Add-Member -NotePropertyName 'selftest' -NotePropertyValue $tunHealth -Force
+        try { Update-Status @{ akses = $stNow.akses } | Out-Null } catch {}
+      }
+    }
+  }
+
+  Log "hidup • RustDesk=$rdId • tunnel=$tun$(if ($tunHealth) { " ($tunHealth)" }) • sesi RDP=$sess • proses RD=$rdProc • sisa=$left"
 
   # publish ulang status tiap 30 menit (heartbeat untuk dashboard)
   if ((Get-Date) -ge $nextPublish) {

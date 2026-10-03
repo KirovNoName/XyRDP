@@ -350,77 +350,69 @@ if ($useTunnel) {
     if ($fr) { Log "  diag: aturan RDP -> $($fr -join ' | ')" } else { Log '  diag: tidak ada aturan grup Remote Desktop' }
   } catch { Log "  diag error: $($_.Exception.Message)" }
 
-  $cand = @('127.0.0.1', '::1')
-  if ($ownIp -and $ownIp -ne '0.0.0.0') { $cand += $ownIp }
-  $rdpTarget = $null
-  for ($i = 1; $i -le 8 -and -not $rdpTarget; $i++) {
-    foreach ($h in $cand) {
-      $t = Test-LocalPort $h $localPort 3000
-      if ($t.ok) { $rdpTarget = $h; Log "  target lokal '$h' -> TERBUKA"; break }
-      else { Log "  target lokal '$h' -> gagal ($($t.err))" }
-    }
-    if (-not $rdpTarget) { Start-Sleep -Seconds 5 }
-  }
-  if (-not $rdpTarget) {
-    $rdpTarget = $cand[-1]
-    Log "  PERINGATAN: RDP tidak terdeteksi terbuka di kandidat mana pun setelah ~40s — tunnel tetap dicoba (self-test memastikan)"
+  # --- tunggu sampai RDP benar-benar menjawab handshake, lalu pilih alamatnya ---
+  # (sekadar TCP terbuka tidak cukup: di runner nyata 172.31.240.1:3389 menerima
+  #  TCP tapi tidak pernah membalas X.224 — tunnel jadi "hidup tapi tidak tembus")
+  $rdpTarget = Wait-RdpReady -TimeoutSec 240
+  if ($rdpTarget) {
+    Log "  target lokal tunnel: $rdpTarget`:$localPort (handshake X.224 terbukti)"
   } else {
-    Log "  target lokal tunnel dipakai: $rdpTarget`:$localPort"
+    $rdpTarget = if ($ownIp -and $ownIp -ne '0.0.0.0') { $ownIp } else { '127.0.0.1' }
+    Log "  PERINGATAN: RDP belum menjawab handshake di alamat mana pun setelah 240s — tunnel tetap dicoba dengan $rdpTarget"
   }
   $script:RdpTarget = $rdpTarget
 
-  if ($prov -eq 'ngrok') { $tun = Start-Ngrok }
-  elseif ($prov -eq 'bore') { $tun = Start-Bore }
-  else {
-    # otomatis: ngrok kalau ada token (lebih stabil), lalu bore (tanpa akun)
-    if ($ngrokTok) { $tun = Start-Ngrok }
-    if (-not $tun) { $tun = Start-Bore }
-    if (-not $tun -and -not $ngrokTok) { Log '  (tips: set secret NGROK_AUTHTOKEN untuk jalur kedua yang lebih stabil)' }
-  }
-  if ($tun) {
+  # --- buat tunnel; kalau tidak tembus, cek ulang RDP lalu ulangi sekali lagi ---
+  for ($att = 1; $att -le 2; $att++) {
+    if ($prov -eq 'ngrok') { $tun = Start-Ngrok }
+    elseif ($prov -eq 'bore') { $tun = Start-Bore }
+    else {
+      # otomatis: ngrok kalau ada token (lebih stabil), lalu bore (tanpa akun)
+      if ($ngrokTok) { $tun = Start-Ngrok }
+      if (-not $tun) { $tun = Start-Bore }
+      if (-not $tun -and -not $ngrokTok) { Log '  (tips: set secret NGROK_AUTHTOKEN untuk jalur kedua yang lebih stabil)' }
+    }
+    if (-not $tun) { $tunStatus = 'gagal'; Log "  GAGAL membuat tunnel (percobaan $att)."; break }
+
     $tunStatus = 'ok'
     Log '  RDP lewat tunnel: buka Remote Desktop Connection ke alamat di atas'
+    Log "  listener $localPort sekarang: $(Get-RdpListenerState $localPort)"
 
-    # --- diagnostik: RDP di VM benar-benar mendengarkan? ---
-    try {
-      $ns = (netstat -ano | Select-String ':3389' | Select-Object -First 4) -join ' | '
-      Log "  netstat :3389 -> $ns"
-    } catch {}
-    $tgt2 = if ($script:RdpTarget) { $script:RdpTarget } else { '127.0.0.1' }
-    $localOk = Test-LocalPort $tgt2 $localPort 5000
-    Log "  RDP lokal $tgt2`:$localPort -> $(if ($localOk) { 'TERBUKA' } else { 'TERTUTUP (RDP mungkin belum jalan!)' })"
-
-    # --- self-test end-to-end: tembak handshake X.224 lewat endpoint publik ---
+    # --- self-test end-to-end: handshake X.224 lewat endpoint publik ---
     $stOk = 'gagal'
-    $cr = [byte[]](0x03,0x00,0x00,0x13, 0x0e,0xe0,0x00,0x00,0x00,0x00,0x00,
-                   0x01,0x00,0x08,0x00,0x03,0x00,0x00,0x00)
-    for ($try = 1; $try -le 3 -and $stOk -ne 'ok'; $try++) {
-      try {
-        $c2 = New-Object System.Net.Sockets.TcpClient
-        if ($c2.ConnectAsync($tun.host, $tun.port).Wait(20000)) {
-          $ns2 = $c2.GetStream()
-          $c2.ReceiveTimeout = 15000
-          $ns2.Write($cr, 0, $cr.Length); $ns2.Flush()
-          $buf = New-Object byte[] 64
-          $n = $ns2.Read($buf, 0, $buf.Length)
-          if ($n -gt 0) {
-            $hex = (($buf[0..($n-1)] | ForEach-Object { $_.ToString('x2') }) -join ' ')
-            Log "  self-test (coba $try): balasan $n byte [$hex]"
-            if ($n -ge 6 -and $buf[0] -eq 0x03 -and $buf[1] -eq 0x00 -and $buf[5] -in @(0xd0, 0xcf)) {
-              $stOk = 'ok'
-              Log "  SELF-TEST OK — $($tun.host):$($tun.port) benar-benar sampai ke port 3389 VM (X.224 Connection Confirm)"
-            }
-          } else {
-            Log "  self-test (coba $try): koneksi ditutup tanpa data (tunnel hidup, tapi target lokal belum menerima)"
-          }
-          $c2.Close()
-        } else { Log "  self-test (coba $try): tidak bisa connect ke $($tun.host):$($tun.port)" }
-      } catch { Log "  self-test (coba $try) error: $($_.Exception.Message)" }
-      if ($stOk -ne 'ok') { Start-Sleep -Seconds 5 }
+    for ($try = 1; $try -le 4 -and $stOk -ne 'ok'; $try++) {
+      $r = Test-RdpHandshake $tun.host $tun.port 15000
+      if ($r.ok) {
+        $stOk = 'ok'
+        Log "  SELF-TEST OK (coba $try) — $($tun.host):$($tun.port) benar-benar tembus ke port $localPort VM [$($r.detail)]"
+      } else {
+        Log "  self-test (coba $try) gagal: $($r.detail)"
+        if ($try -lt 4) { Start-Sleep -Seconds 8 }
+      }
     }
-  } else {
+
+    if ($stOk -eq 'ok') { break }
+
+    # tunnel hidup tapi belum tembus -> cek ulang RDP, kalau berubah ulangi tunnel
+    if ($att -eq 1) {
+      Log '  tunnel belum tembus — cek ulang kesiapan RDP lalu ulangi tunnel dengan target terbaru'
+      $t2 = Wait-RdpReady -TimeoutSec 150
+      if ($t2) { $rdpTarget = $t2; $script:RdpTarget = $t2; Log "  target terbaru: $t2`:$localPort" }
+      else { Log '  RDP masih belum menjawab handshake lokal' }
+      try { Log "  log $($tun.provider) (4 baris terakhir): $((Get-Content $tun.log -Tail 4 -ErrorAction SilentlyContinue) -join ' / ')" } catch {}
+      try { Stop-Process -Id $tun.pid -Force -ErrorAction SilentlyContinue } catch {}
+      $tun = $null
+      Start-Sleep -Seconds 5
+    }
+  }
+
+  if (-not $tun) {
     $tunStatus = 'gagal'
     Log '  GAGAL membuat tunnel. Sesi tetap jalan — pakai jalur RustDesk.'
+  } else {
+    $tgt2 = if ($script:RdpTarget) { $script:RdpTarget } else { '127.0.0.1' }
+    $localOk = (Test-LocalPort $tgt2 $localPort 5000).ok
+    Log "  RDP lokal $tgt2`:$localPort -> $(if ($localOk) { 'TERBUKA' } else { 'TERTUTUP (RDP mungkin belum jalan!)' })"
   }
 }
 
@@ -444,6 +436,9 @@ $aksesObj = [ordered]@{
     address    = if ($tun) { "$($tun.host):$($tun.port)" } else { '' }
     rdp_local  = if ($tun) { "$(if ($script:RdpTarget) { $script:RdpTarget } else { '127.0.0.1' }) -> $(if ($localOk) { 'terbuka' } else { 'tertutup' })" } else { '' }
     selftest   = if ($tun) { $stOk } else { '' }
+    note2      = if ($tun -and $stOk -eq 'ok') { 'Tunnel sudah diuji end-to-end (handshake RDP X.224 lewat endpoint publik)' }
+                 elseif ($tun) { 'Tunnel hidup, tapi uji end-to-end belum lolos — coba lagi sebentar; jalur RustDesk tetap jalan' }
+                 else { '' }
     note       = 'Isi Host+Port ini di XyDesk Remote (Koneksi RDP) atau mstsc; user ' + $u
   }
 }
