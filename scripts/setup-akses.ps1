@@ -453,11 +453,12 @@ if ($useTunnel) {
     elseif ($prov -eq 'ngrok') { $tun = Start-Ngrok }
     elseif ($prov -eq 'bore') { $tun = Start-Bore }
     else {
-      # otomatis = yang paling andal dulu: pinggy (terbukti 8/8 dari node luar)
+      # ngrok dulu bila token tersedia: satu koneksi keluar 443 + hostname
+      # anycast (tidak butuh 'pairing' seperti bore / remote-forward SSH)
+      if ($ngrokTok) { $tun = Start-Ngrok }
       if (-not $tun) { $tun = Start-Pinggy }
-      if (-not $tun -and $ngrokTok) { $tun = Start-Ngrok }
       if (-not $tun) { $tun = Start-Bore }
-      if (-not $tun) { Log '  (tips: set secret NGROK_AUTHTOKEN untuk jalur cadangan lain)' }
+      if (-not $tun) { Log '  (tips: isi secret NGROK_AUTHTOKEN = jalur paling andal di runner GitHub)' }
     }
     if (-not $tun) { $tunStatus = 'gagal'; Log "  GAGAL membuat tunnel (percobaan $att)."; break }
 
@@ -467,7 +468,7 @@ if ($useTunnel) {
 
     # --- VERIFIKASI DARI LUAR (yang benar-benar dilihat klien HP) ---
     $reach = Get-OutsideReach $tun.host $tun.port 90
-    $reachOk = if ($reach.ok) { 'ok' } else { 'gagal' }
+    $reachOk = if ($reach.ok -eq $true) { 'ok' } elseif ($reach.ok -eq $false) { 'gagal' } else { 'tidak diuji' }
     $reachTxt = $reach.detail
     if ($reach.ok) { Log "  UJI DARI LUAR OK - $reachTxt bisa menembus $($tun.host):$($tun.port)" }
     else { Log "  UJI DARI LUAR GAGAL - $reachTxt (alamat ini kemungkinan tidak bisa dipakai dari HP)" }
@@ -485,10 +486,10 @@ if ($useTunnel) {
       }
     }
 
-    if ($stOk -eq 'ok' -and $reachOk -eq 'ok') { break }
+    if ($stOk -eq 'ok' -and $reachOk -ne 'gagal') { break }
 
     # tunnel hidup tapi belum terbukti dari luar -> ganti provider lain
-    if ($att -eq 1 -and $stOk -eq 'ok' -and $reachOk -ne 'ok') {
+    if ($att -eq 1 -and $stOk -eq 'ok' -and $reachOk -eq 'gagal') {
       Log "  '$($tun.provider)' tembus dari dalam VM tapi TIDAK dari luar - ganti provider..."
       try { Stop-Process -Id $tun.pid -Force -ErrorAction SilentlyContinue } catch {}
       $tun = $null
@@ -503,10 +504,10 @@ if ($useTunnel) {
           else { Start-Sleep -Seconds 8 }
         }
         $reach = Get-OutsideReach $tun.host $tun.port 90
-        $reachOk = if ($reach.ok) { 'ok' } else { 'gagal' }
+        $reachOk = if ($reach.ok -eq $true) { 'ok' } elseif ($reach.ok -eq $false) { 'gagal' } else { 'tidak diuji' }
         $reachTxt = "$($reach.detail) [provider $($tun.provider)]"
         Log "  uji luar (provider baru $($tun.provider)): $reachTxt"
-        if ($stOk -eq 'ok' -and $reachOk -eq 'ok') { break }
+        if ($stOk -eq 'ok' -and $reachOk -ne 'gagal') { break }
       }
     }
 
@@ -555,8 +556,9 @@ $aksesObj = [ordered]@{
     selftest   = if ($tun) { $stOk } else { '' }
     outside    = if ($tun) { "$reachOk ($reachTxt)" } else { '' }
     note2      = if ($tun -and $stOk -eq 'ok' -and $reachOk -eq 'ok') { 'Tunnel diuji dua arah: handshake RDP dari dalam VM DAN dari node luar — inilah yang dilihat HP kamu' }
-                 elseif ($tun -and $reachOk -eq 'ok') { 'Alamat terbuka dari luar, tapi handshake RDP dari dalam belum lolos - coba lagi sebentar' }
-                 elseif ($tun) { 'Tunnel hidup di VM tetapi TIDAK terbukti terbuka dari luar - pakai jalur RustDesk untuk sesi ini' }
+                 elseif ($tun -and $reachOk -eq 'gagal') { 'Tunnel hidup di VM tetapi TERBUKTI tidak terbuka dari luar — pakai jalur RustDesk untuk sesi ini' }
+                 elseif ($tun -and $stOk -eq 'ok') { 'Tunnel siap; uji dari luar tidak bisa dijalankan (batas layanan uji) — kalau HP gagal, pakai RustDesk' }
+                 elseif ($tun) { 'Tunnel hidup, handshake RDP dari dalam belum lolos — coba lagi sebentar' }
                  else { '' }
     note       = 'Isi Host+Port ini di XyDesk Remote (Koneksi RDP) atau mstsc; user ' + $u
   }
