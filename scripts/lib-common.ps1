@@ -341,8 +341,23 @@ function Get-OutsideReach([string]$HostName, [int]$Port, [int]$TimeoutSec = 90) 
   $res = @{ ok = $false; detail = 'tidak diuji'; nodesOk = 0; nodesAll = 0 }
   try {
     $u = "https://check-host.net/check-tcp?host=$([uri]::EscapeDataString("$HostName`:$Port"))&max_nodes=6"
-    $req = Invoke-RestMethod -Uri $u -Headers @{ 'Accept' = 'application/json'; 'User-Agent' = 'XyRDP' } -TimeoutSec 30
-    if (-not $req.request_id) { $res.detail = 'check-host menolak'; return $res }
+    $req = $null
+    foreach ($coba in 1..3) {
+      try {
+        $req = Invoke-RestMethod -Uri $u -Headers @{ 'Accept' = 'application/json'; 'User-Agent' = 'XyRDP' } -TimeoutSec 30
+        if ($req.request_id) { break }
+      } catch {
+        # 403 = check-host membatasi laju (bukan bukti tunnel mati!) -> jangan
+        # dipakai untuk memutuskan ganti provider, cukup 'tidak diuji'.
+        $res.ok = $null; $res.detail = "tidak bisa diuji dari luar: $($_.Exception.Message)"
+        Log "  (uji luar: $($res.detail))"
+        Start-Sleep -Seconds 8
+      }
+    }
+    if (-not $req -or -not $req.request_id) {
+      if (-not $res.detail) { $res.detail = 'check-host menolak permintaan' }
+      return $res
+    }
     $rid = $req.request_id
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     Start-Sleep -Seconds 6
