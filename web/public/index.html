@@ -115,6 +115,7 @@
       <h2>Sesi</h2>
       <div class="row"><span class="k">Kondisi</span><span class="v"><span class="pill" id="stPill">MEMERIKSA</span></span></div>
       <div class="row"><span class="k">Run</span><span class="v"><a id="stRun" href="#" target="_blank" rel="noopener">-</a></span></div>
+      <div class="row"><span class="k">Sistem</span><span class="v" id="stOs">-</span></div>
       <div class="row"><span class="k">Dimulai</span><span class="v" id="stStart">-</span></div>
       <div class="row"><span class="k">Berakhir otomatis</span><span class="v" id="stEnd">-</span></div>
       <div class="row"><span class="k">Sisa waktu</span><span class="v big" id="stLeft">-</span></div>
@@ -124,10 +125,12 @@
 
     <div class="panel">
       <h2>Koneksi</h2>
-      <div class="row"><span class="k">Alamat (Tailscale)</span>
-        <span class="v"><span id="cIp">-</span> <button class="mini" data-copy="cIp">SALIN</button></span></div>
-      <div class="row"><span class="k">MagicDNS</span><span class="v" id="cDns">-</span></div>
-      <div class="row"><span class="k">Port</span><span class="v" id="cPort">-</span></div>
+      <div class="row"><span class="k">Jalur yang dipakai</span><span class="v" id="cMode">-</span></div>
+      <div class="row"><span class="k">RustDesk ID</span>
+        <span class="v"><span id="cRdId">-</span> <button class="mini" data-copy="cRdId">SALIN</button></span></div>
+      <div class="row"><span class="k">RustDesk server</span><span class="v"><small id="cRdSrv">server publik bawaan</small></span></div>
+      <div class="row"><span class="k">Tunnel RDP</span>
+        <span class="v"><span id="cTun">-</span> <button class="mini" data-copy="cTun">SALIN</button></span></div>
       <div class="row"><span class="k">Pengguna</span>
         <span class="v"><span id="cUser">-</span> <button class="mini" data-copy="cUser">SALIN</button></span></div>
       <div class="row"><span class="k">Hak akses</span><span class="v">Administrator <small>(Administrators + Remote Desktop Users, token admin penuh)</small></span></div>
@@ -135,13 +138,10 @@
         <span class="v"><span id="cPass">************</span>
           <button class="mini" id="cToggle">TAMPIL</button>
           <button class="mini" data-copy="cPassVal">SALIN</button></span></div>
-      <div class="hint">Password di atas dipakai untuk Remote Desktop <b>dan</b> XyDesk (sama: password login Windows).</div>
-      <div style="margin-top:12px;padding-top:10px;border-top:1px dotted #1f1f23">
-        <div class="row" style="border-bottom:0"><span class="k">XyDesk ID</span>
-          <span class="v"><span id="cXdId">-</span> <button class="mini" data-copy="cXdId">SALIN</button></span></div>
-        <div class="hint" id="cXdAll" style="margin-top:2px"></div>
-      </div>
-      <div class="hint">Hubungkan lewat klien Remote Desktop ke alamat di atas (Tailscale harus aktif &amp; login ke tailnet yang sama), atau pakai XyDesk dengan ID + password di atas. Sesi selalu masuk sebagai Administrator.</div>
+      <div class="hint">Satu kata sandi untuk dua jalur: <b>RustDesk</b> (unduh app-nya di
+        <a href="https://rustdesk.com/download" target="_blank" rel="noopener">rustdesk.com/download</a>, masukkan ID + kata sandi —
+        tanpa VPN, tanpa akun) <b>atau</b> <b>Remote Desktop Connection</b> (<code>mstsc</code>) ke alamat tunnel di atas.
+        Sesi selalu masuk sebagai Administrator.</div>
     </div>
 
     <div class="panel">
@@ -157,13 +157,31 @@
           </select></div>
         <div><label>Hostname</label><input id="fHost" value="xyrdp" spellcheck="false"></div>
       </div>
-      <div class="hint" style="margin-top:12px">VM sekali-pakai. Setiap sesi baru otomatis memasang Lightshot, wallpaper, taskbar translucent, dan XyDesk host (atur di panel Tampilan).</div>
+      <div class="two">
+        <div><label>Jalur akses</label>
+          <select id="fAkses">
+            <option value="keduanya" selected>Keduanya (RustDesk + tunnel)</option>
+            <option value="rustdesk">RustDesk saja</option>
+            <option value="tunnel">Tunnel RDP saja</option>
+          </select></div>
+        <div><label>Provider tunnel</label>
+          <select id="fProv">
+            <option value="otomatis" selected>Otomatis</option>
+            <option value="bore">bore.pub (tanpa akun)</option>
+            <option value="ngrok">ngrok (butuh token)</option>
+          </select></div>
+      </div>
+      <div class="row" style="margin-top:6px"><span class="k">Tampilan Windows 10</span>
+        <span class="v"><label class="switch"><input type="checkbox" id="fWin10" checked><i></i></label></span></div>
+      <div class="hint" style="margin-top:4px">Runner = Windows Server 2022 (UI/kernel = Windows 10 21H2) + tweak Windows 10.
+        Runner GitHub tidak punya image Windows 10 desktop.</div>
       <div class="btns">
         <button class="primary" id="bStart" style="flex:2">NYALAKAN</button>
         <button class="danger" id="bStop" style="flex:1">MATIKAN</button>
       </div>
       <div class="note" id="opNote"></div>
-      <div class="hint">Satu sesi aktif; permintaan baru otomatis mengantre. Saat sesi berakhir: node Tailscale dihapus, status dibersihkan, dan run lama dihapus otomatis.</div>
+      <div class="hint">Satu sesi aktif; permintaan baru otomatis mengantre. Saat sesi berakhir: jalur akses dimatikan,
+        status dibersihkan, dan run lama dihapus otomatis.</div>
     </div>
 
     <div class="panel">
@@ -191,11 +209,14 @@
           <option value="opaque">Opaque</option>
           <option value="normal">Normal</option>
         </select></span></div>
+      <label style="margin-top:16px">Gaya Windows 10</label>
+      <div class="row"><span class="k">Tweak tampilan</span>
+        <span class="v"><label class="switch"><input type="checkbox" id="exWin10"><i></i></label></span></div>
+      <div class="row"><span class="k">Label "Windows 10 Pro"</span>
+        <span class="v"><label class="switch"><input type="checkbox" id="exBadge"><i></i></label></span></div>
       <label style="margin-top:16px">Aplikasi</label>
       <div class="row"><span class="k">Lightshot</span>
         <span class="v"><label class="switch"><input type="checkbox" id="exLs"><i></i></label></span></div>
-      <div class="row"><span class="k">XyDesk host</span>
-        <span class="v"><label class="switch"><input type="checkbox" id="exHost"><i></i></label></span></div>
       <div class="btns"><button id="exSave" style="flex:1">SIMPAN</button></div>
       <div class="note" id="exNote"></div>
       <div class="hint">Berlaku otomatis pada sesi <b>berikutnya</b>. Gambar &amp; pengaturan disimpan di repo (<code>assets/</code>).</div>
@@ -265,7 +286,7 @@
     if(e.lightshot)s.push('lightshot:'+(lbl[e.lightshot]||e.lightshot));
     if(e.translucent)s.push('translucent:'+(lbl[e.translucent]||e.translucent));
     if(e.wallpaper)s.push('wallpaper:'+(lbl[e.wallpaper]||e.wallpaper)+(e.wallpaper_file?(' '+e.wallpaper_file):''));
-    if(e.xydesk_host)s.push('xydesk:'+(lbl[e.xydesk_host]||e.xydesk_host));
+    if(g.win10&&g.win10.look)s.push('win10:'+(lbl[g.win10.look]||g.win10.look)+(g.win10.badge==='ok'?'+label':''));
     s.push('admin:'+(e.admin===true?'YA':(e.admin===false?'TIDAK':'-')));
     return s.join(' · ')||'-'
   }
@@ -284,19 +305,22 @@
       setPill(txt,cls);
       var d=$('hdot');d.className='dot '+(cls==='ok'?'on':cls==='mid'?'mid':cls==='err'?'err':'');
       if(r){$('stRun').textContent='#'+r.id;$('stRun').href=r.html_url||'#'}
-      var ip=g?g.tailscale_ip:'-', dns=g?(g.tailscale_dns||'-'):'-', st=g?g.started_at:null, en=g?g.expires_at:null;
-      $('cIp').textContent=ip; $('cDns').textContent=dns;
+      var st=g?g.started_at:null, en=g?g.expires_at:null;
+      $('stOs').textContent=g&&g.os?(g.os.replace(/^Microsoft /,'')+(g.os_style?(' · '+g.os_style):'')):'-';
       $('stStart').textContent=fmt(st); $('stEnd').textContent=fmt(en);
       $('stExtras').textContent=extrasText(g);
-      // XyDesk ID (turunan IP, dihitung di VM)
-      var xd=g&&g.extras?g.extras.xydesk_id:'';
-      var xds=g&&g.extras&&g.extras.xydesk_ids?g.extras.xydesk_ids:[];
-      $('cXdId').textContent=(xd&&xd!==''&&xd!=='-')?xd:'-';
-      var others=[];
-      for(var i=0;i<xds.length;i++){ if(!xd||xds[i].id!==xd) others.push(xds[i].id+' ('+xds[i].iface+')'); }
-      $('cXdAll').textContent=others.length?('ID lain: '+others.join(', ')):'';
+      // --- akses: RustDesk + tunnel ---
+      var a=g&&g.akses?g.akses:null;
+      var modeTxt={keduanya:'RustDesk + tunnel RDP',rustdesk:'RustDesk',tunnel:'Tunnel RDP'};
+      $('cMode').textContent=a?(modeTxt[a.mode]||a.mode):'-';
+      var rdId=a&&a.rustdesk?a.rustdesk.id:'';
+      $('cRdId').textContent=(rdId?rdId:'-');
+      $('cRdSrv').textContent=a&&a.rustdesk&&a.rustdesk.server?a.rustdesk.server:'server publik bawaan';
+      var tun=a&&a.tunnel?a.tunnel.address:'';
+      $('cTun').textContent=(tun?((a.tunnel.provider?a.tunnel.provider.toUpperCase()+' ':'')+tun):'-');
       t0=st?Date.parse(st):null; t1=en?Date.parse(en):null; tickLeft();
-      if(g&&g.active&&ip!=='-'&&ip!==poll._ip){poll._ip=ip;flash('Sesi aktif: '+ip)}
+      var key=(rdId||'')+'|'+(tun||'');
+      if(g&&g.active&&key!=='|'&&key!==poll._key){poll._key=key;flash('Sesi aktif — RustDesk '+(rdId||'-')+' / tunnel '+(tun||'-'))}
     }).catch(function(){})
   }
   function tickLeft(){
@@ -312,9 +336,11 @@
 
   function startSesi(){
     var b=$('bStart');b.disabled=true;note('Mengirim permintaan...');
-    api('/start','POST',{durasi:$('fDur').value,hostname:$('fHost').value.trim()})
-    .then(function(){note('Permintaan terkirim. VM siap dalam ±2–4 menit.','ok');
-      flash('Permintaan start terkirim');setTimeout(pullLogs,25000)})
+    api('/start','POST',{durasi:$('fDur').value,hostname:$('fHost').value.trim(),
+      akses:$('fAkses').value,tunnel_provider:$('fProv').value,
+      win10:$('fWin10').checked?'ya':'tidak'})
+    .then(function(){note('Permintaan terkirim. VM siap dalam ±3–5 menit (VM + RustDesk + tunnel).','ok');
+      flash('Permintaan start terkirim');setTimeout(pullLogs,30000)})
     .catch(function(e){note('Gagal: '+e.message,'bad')})
     .finally(function(){b.disabled=false;poll()})
   }
@@ -341,8 +367,8 @@
       var src=b.dataset.copy, txt='';
       if(src==='cPassVal')txt=String(cfg.rdp_password||'');
       else if(src==='cUser')txt=$('cUser').textContent;
-      else if(src==='cIp')txt=$('cIp').textContent;
-      else if(src==='cXdId')txt=$('cXdId').textContent;
+      else if(src==='cRdId')txt=$('cRdId').textContent;
+      else if(src==='cTun')txt=$('cTun').textContent.replace(/^\s*[A-Z]+\s+/,'');
       function done(){b.textContent='TERSALIN';setTimeout(function(){b.textContent='SALIN'},1200)}
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done)}
       else{var t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);
@@ -367,7 +393,8 @@
       $('exTrans').checked=!!c.config.translucent;
       $('exMode').value=c.config.translucent_mode||'clear';
       $('exLs').checked=!!c.config.lightshot;
-      $('exHost').checked=!!c.config.xydesk_host;
+      $('exWin10').checked=c.config.win10_look!==false;
+      $('exBadge').checked=c.config.win10_badge!==false;
       if(c.config.wallpaper){
         var im=$('wpPrev');im.src=c.wallpaper_url;im.classList.remove('hidden');$('wpDropTxt').classList.add('hidden');
         $('exPill').textContent='wallpaper aktif';$('exPill').className='pill';
@@ -427,7 +454,7 @@
   $('exSave').addEventListener('click',function(){
     var b=this;b.disabled=true;exNote('Menyimpan...');
     api('/extras','POST',{translucent:$('exTrans').checked,translucent_mode:$('exMode').value,
-      lightshot:$('exLs').checked,xydesk_host:$('exHost').checked})
+      lightshot:$('exLs').checked,win10_look:$('exWin10').checked,win10_badge:$('exBadge').checked})
       .then(function(){exNote('Tersimpan — berlaku otomatis di sesi berikutnya','ok');flash('Pengaturan tersimpan');loadExtras()})
       .catch(function(e){exNote('Gagal: '+e.message,'bad')})
       .finally(function(){b.disabled=false})
@@ -438,7 +465,7 @@
     return r.json()
   }).then(function(c){cfg=c;
     $('repoTop').innerHTML='<b>'+c.owner+' / '+c.repo+'</b><br>sesi administrator';
-    $('cUser').textContent=c.rdp_user;$('cPort').textContent=c.rdp_port;
+    $('cUser').textContent=c.rdp_user;
     enterApp()})
   .catch(function(){$('loginBox').classList.remove('hidden')})
 })();

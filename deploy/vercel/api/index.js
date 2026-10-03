@@ -23,7 +23,7 @@ const API = 'https://api.github.com';
 
 // ---- konfigurasi ekstra (assets/rdp-extras.json di repo) + wallpaper ----
 const EXTRAS_PATH = 'assets/rdp-extras.json';
-const EXTRAS_DEFAULTS = { lightshot: true, translucent: true, translucent_mode: 'clear', wallpaper: true, wallpaper_file: 'wallpaper.jpg', xydesk_host: true };
+const EXTRAS_DEFAULTS = { lightshot: true, translucent: true, translucent_mode: 'clear', wallpaper: true, wallpaper_file: 'wallpaper.jpg', win10_look: true, win10_badge: true, win10_wallpaper: true };
 const WALLPAPER_RE = /^wallpaper\.(jpg|jpeg|png|bmp)$/i;
 
 async function readRepoFile(path) {
@@ -204,15 +204,23 @@ module.exports = async (req, res) => {
       if ((!session || !session.active) && run && (run.status === 'in_progress' || run.status === 'queued')) {
         try {
           const txt = await readLog(run.id);
-          const mIp = txt.match(/TAILNET IP\s*:\s*(100\.\d+\.\d+\.\d+)/);
-          const mDns = txt.match(/MAGICDNS\s*:\s*(\S+)/);
-          const mDur = (txt.match(/Durasi sesi\s*:\s*(\d+) menit/) || [])[1];
-          if (mIp) {
+          const mRd = txt.match(/RUSTDESK ID\s*:\s*([0-9][0-9\s]{5,14})/);
+          const mTun = txt.match(/TUNNEL\s*:\s*([A-Za-z0-9.\-]+):(\d+)/);
+          if (mRd || mTun) {
+            const rdId = mRd ? mRd[1].replace(/\s+/g, '') : '';
             session = {
-              active: true, tailscale_ip: mIp[1], tailscale_dns: mDns ? mDns[1] : '',
+              active: true,
               rdp_port: 3389, rdp_user: CFG.rdp_user,
               started_at: run.run_started_at || run.created_at,
-              expires_at: new Date(Date.parse(run.run_started_at || run.created_at) + (+mDur || 360) * 60000).toISOString(),
+              expires_at: new Date(Date.parse(run.run_started_at || run.created_at) + 360 * 60000).toISOString(),
+              akses: {
+                mode: 'keduanya',
+                rustdesk: { status: rdId ? 'ok' : 'pending', id: rdId, server: 'server publik bawaan' },
+                tunnel: {
+                  status: mTun ? 'ok' : 'pending', provider: '', host: mTun ? mTun[1] : '',
+                  port: mTun ? Number(mTun[2]) : 0, address: mTun ? `${mTun[1]}:${mTun[2]}` : '',
+                },
+              },
               source: 'log',
             };
           }
@@ -224,7 +232,10 @@ module.exports = async (req, res) => {
       const body = await readBody(req);
       const inputs = {
         durasi_menit: String(body.durasi || '360'),
-        ts_hostname: String(body.hostname || 'xyrdp').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 30) || 'xyrdp',
+        hostname: String(body.hostname || 'xyrdp').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 30) || 'xyrdp',
+        akses: ['keduanya', 'rustdesk', 'tunnel'].includes(String(body.akses)) ? String(body.akses) : 'keduanya',
+        tunnel_provider: ['otomatis', 'bore', 'ngrok'].includes(String(body.tunnel_provider)) ? String(body.tunnel_provider) : 'otomatis',
+        win10: (body.win10 === 'tidak' ? 'tidak' : 'ya'),
       };
       await gh('POST', `/repos/${CFG.owner}/${CFG.repo}/actions/workflows/${CFG.workflow}/dispatches`, { ref: CFG.branch, inputs });
       return send(200, { ok: true, inputs });
@@ -260,7 +271,7 @@ module.exports = async (req, res) => {
       const body = await readBody(req);
       const { json: cur, sha } = await readRepoFile(EXTRAS_PATH);
       const next = Object.assign({}, EXTRAS_DEFAULTS, cur || {});
-      for (const k of ['lightshot', 'translucent', 'wallpaper', 'xydesk_host']) {
+      for (const k of ['lightshot', 'translucent', 'wallpaper', 'win10_look', 'win10_badge', 'win10_wallpaper']) {
         if (k in body) next[k] = !!body[k];
       }
       if (body.translucent_mode) {

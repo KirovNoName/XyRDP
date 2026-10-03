@@ -1,200 +1,249 @@
-# XyRDP — Windows RDP 6 Jam via GitHub Actions + Tailscale
+# XyRDP v2 — Windows "gaya 10" RDP 6 Jam via GitHub Actions
+### tanpa Tailscale · tanpa self-host · akses lewat RustDesk + tunnel RDP
 
-RDP Windows Server **gratis** pakai runner `windows-latest` GitHub Actions,
-diakses lewat **Tailscale** (tidak ada port publik), sesi ditahan **pas 6 jam**
-(batas keras job GitHub), lalu VM musnah sendiri.
+RDP Windows **gratis** pakai runner `windows-2022` GitHub Actions, diakses
+**tanpa VPN dan tanpa server sendiri**: jalur 1 lewat **RustDesk** (relay publik
+RustDesk, cukup unduh kliennya), jalur 2 lewat **tunnel TCP** ke port 3389
+(**bore.pub** tanpa akun, atau **ngrok** pakai token gratis) untuk
+**Remote Desktop Connection (`mstsc`)** biasa. Sesi ditahan sampai durasi
+(maks 6 jam = batas keras job GitHub), lalu VM musnah sendiri.
 
 ```
-[Kamu] --Tailscale(100.x.x.x)--> [Windows Server 2022 @ GitHub runner] <--diatur-- workflow rdp-6h.yml
-                                      └─ RDP :3389, user xyadmin (admin penuh)
+[PC kamu] --RustDesk (relay publik)---------> [Windows Server 2022 @ GitHub runner]
+[PC kamu] --mstsc -> bore.pub:PORT ---------> [port 3389, hanya lewat tunnel]
+                                                └─ user xyadmin (admin penuh)
 ```
 
-## Isi repo
+---
+
+## 1. Soal "Windows 10" — baca ini dulu (jujur)
+
+Runner GitHub **tidak menyediakan image Windows 10 desktop**. Yang tersedia
+hanya **Windows Server**, dan sejak **Juni 2026** label `windows-latest` malah
+berpindah ke **Windows Server 2025** (tampilannya **Windows 11**). Karena itu:
+
+| Pilihan | Hasil |
+|---|---|
+| **`windows-2022` + tweak (dipakai di sini)** | Windows Server **2022**, build **10.0.20348** — UI/kernel-nya **sama dengan Windows 10 21H2**. Ditambah `setup-win10.ps1` supaya terasa Windows 10, bukan Server. |
+| Windows 10 asli (Pro/Home) | **Tidak bisa** di runner GitHub-hosted. Hanya lewat **self-hosted runner** atau VM/cloud lain — di luar permintaan "tanpa self-host". |
+
+Yang dilakukan `scripts/setup-win10.ps1`:
+- **Server Manager** tidak muncul lagi saat login, **Shutdown Event Tracker** mati
+  (tidak tanya "alasan shutdown"), **IE Enhanced Security** mati.
+- **Layar login ala Windows 10**: `Ctrl+Alt+Del` tidak diwajibkan, teks versi di
+  desktop dimatikan, akun `Administrator` bawaan dinonaktifkan (layar login bersih).
+- **Personalisasi khas Windows 10**: transparansi, warna aksen di taskbar
+  (biru `#0078D7`), taskbar "jangan gabungkan tombol", kotak pencarian + Task View,
+  tema gelap taskbar.
+- **Windows Search diaktifkan** → Start menu bisa mencari aplikasi.
+- **Wallpaper** `assets/wallpaper-win10.jpg` dipasang ke sesi + **latar layar login**
+  (dikompres otomatis < 256 KB supaya dipakai LogonUI), fallback ke `assets/wallpaper.*`.
+- **(Opsional, kosmetik)** label registry **"Windows 10 Pro / 22H2"**
+  (`ProductName`, `EditionID`, `DisplayVersion`, `ProductType=WinNT`) — supaya
+  aplikasi yang membaca registry menganggapnya Windows 10. **Tidak** mengubah
+  kernel sebenarnya; `winver`/About bisa tetap menampilkan nama Server karena
+  branding di `branding\Basebrd` milik TrustedInstaller tidak diubah.
+
+Semua tweak bisa dimatikan: input workflow **`win10: tidak`**, atau toggle
+**"Tweak tampilan"** / **"Label Windows 10 Pro"** di dashboard (tersimpan di
+`assets/rdp-extras.json`).
+
+---
+
+## 2. Jalur akses (tanpa Tailscale, tanpa self-host)
+
+| Jalur | Cara pakai di sisimu | Butuh akun? |
+|---|---|---|
+| **RustDesk** | Unduh klien gratis di [rustdesk.com/download](https://rustdesk.com/download) → masukkan **RustDesk ID** + **password** dari dashboard | **Tidak** — relay publik bawaan (`rs-ny/rs-sg.rustdesk.com`) |
+| **Tunnel RDP** | **Remote Desktop Connection** (`mstsc`) → alamat `bore.pub:<port>` dari dashboard → login `xyadmin` + password | **Tidak** (bore.pub) · ngrok pakai token akun gratis |
+
+Detail di `scripts/setup-akses.ps1`:
+- **RustDesk**: install via `winget` (fallback installer GitHub releases),
+  dipasang **sebagai service** (mode *unattended*, bisa konek sampai layar
+  login/UAC), **password permanen = `RDP_PASSWORD`** (satu password untuk
+  RustDesk + RDP), lalu ID diambil (`rustdesk.exe --get-id`) dan ditulis ke
+  status → tampil di dashboard. Input **`rd_server`** (lanjutan) opsional kalau
+  nanti mau pakai server RustDesk sendiri/terdekat — default tetap publik.
+- **Tunnel**: `bore local 3389 --to bore.pub` (tanpa akun, port acak) atau
+  `ngrok tcp 3389` (butuh secret `NGROK_AUTHTOKEN`). Proses berjalan selama sesi,
+  dibunuh di step Finalize. **serveo.net tidak dipakai** karena tunnel TCP
+  gratisnya hanya bertahan 10 menit (tidak cocok untuk sesi 6 jam).
+
+> Catatan keamanan: tunnel membuat **port 3389 VM terbuka ke internet** selama
+> sesi. Rem-nya: password panjang (`RDP_PASSWORD`) + NLA Windows. VM ini juga
+> sekali-pakai dan hidup maksimal 6 jam. Kalau itu terlalu terbuka bagimu,
+> pilih input `akses: rustdesk` (tanpa tunnel sama sekali).
+
+---
+
+## 3. Isi repo
+
 | Path | Fungsi |
 |---|---|
-| `.github/workflows/rdp-6h.yml` | Workflow utama: boot VM, setup RDP, join Tailscale, tahan 6 jam |
-| `scripts/setup-rdp.ps1` | MODE BERSIH: bikin admin, buka RDP, join Tailscale (tanpa tweak lain) |
-| `scripts/setup-extras.ps1` | MODE EKSTRA: Lightshot + wallpaper + taskbar translucent + XyDesk host auto-setup |
-| `scripts/keepalive.ps1` | Loop penahan sesi + heartbeat tiap 5 menit |
+| `.github/workflows/rdp-6h.yml` | Workflow utama (runner `windows-2022`, timeout 360 menit) |
+| `scripts/lib-common.ps1` | Helper bersama: logger, registry, hive profil Default, pembaca status, unduhan |
+| `scripts/setup-rdp.ps1` | User admin + RDP 3389 + tulis status awal |
+| `scripts/setup-win10.ps1` | **Tweak "Windows 10 look"** (Server Manager, personalisasi, wallpaper, label) |
+| `scripts/setup-akses.ps1` | **RustDesk + tunnel RDP** (pengganti Tailscale) |
+| `scripts/setup-extras.ps1` | Lightshot + TranslucentTB + wallpaper (dari `assets/`) |
+| `scripts/keepalive.ps1` | Penahan sesi + heartbeat tiap 5 menit + publish status tiap 30 menit |
 | `scripts/publish-status.ps1` | Tulis `rdp-status.json` ke branch `status` (dibaca web) |
-| `scripts/finalize-rdp.ps1` | Logout Tailscale + **hapus node dari tailnet** (OAuth/API token) |
-| `scripts/cleanup-actions.ps1` | Bersih-bersih: hapus run Actions lama + log-nya (simpan 3 terbaru) |
-| `assets/rdp-extras.json` | Konfigurasi ekstra (bisa diubah dari dashboard web) |
-| `assets/wallpaper.jpg` | Wallpaper default (ganti lewat dashboard web: upload → pasang) |
-| `web/` | Dashboard lokal (Node, tanpa dependency) |
-| `deploy/vercel/` | Versi dashboard untuk hosting di Vercel (catch-all function + Basic Auth) |
+| `scripts/finalize-rdp.ps1` | Matikan RustDesk + tunnel, bersihkan kredensial lokal |
+| `scripts/cleanup-actions.ps1` | Hapus run Actions lama + log-nya (simpan `KEEP_RUNS` terbaru) |
+| `assets/rdp-extras.json` | Konfigurasi ekstra (diubah dari dashboard) |
+| `assets/wallpaper-win10.jpg` | Wallpaper default gaya Windows 10 (+ latar layar login) |
+| `web/` | Dashboard lokal (Node ≥ 18, tanpa dependency, tanpa install apa pun) |
+| `deploy/vercel/` | Dashboard versi hosting (catch-all function + login cookie) |
 
-## Mode ekstra (otomatis setiap sesi)
-Setelah VM siap, `setup-extras.ps1` otomatis memasang yang berikut (bisa dimatikan
-lewat input workflow **`ekstra: tidak`**, atau per-item di dashboard web):
+Yang **dihapus** dari versi lama: seluruh integrasi Tailscale (auth key, MagicDNS,
+hapus node via API/OAuth), XyDesk host (`rdp.xydesk.my.id/host.ps1`), XyDesk ID,
+dan input `exit_node`.
 
-| Ekstra | Cara kerja |
+---
+
+## 4. Cara pakai
+
+1. **Dashboard**: buka URL dashboard-mu (deploy `deploy/vercel/` — lihat §6 — atau
+   jalankan lokal `cd web && node server.js` → http://localhost:4173; jalur ini
+   tidak butuh `npm install`, Node ≥ 18).
+2. Pilih **durasi**, **hostname**, **jalur akses** (`keduanya` / `rustdesk` /
+   `tunnel`), **provider tunnel** (`otomatis` / `bore` / `ngrok`), dan toggle
+   **Tampilan Windows 10** → tombol **NYALAKAN**.
+   (Manual: Actions → “XyRDP - Windows 10 Style RDP 6 Jam” → Run workflow.)
+3. Tunggu **±3–5 menit** sampai status **AKTIF**. Panel **Koneksi** akan
+   menampilkan **RustDesk ID** dan **alamat tunnel** (mis. `bore.pub:47321`).
+4. Masuk dengan salah satu:
+   - **RustDesk**: buka klien → masukkan **ID** → password → Connect.
+   - **RDP**: `mstsc` → alamat tunnel → login `xyadmin` + password.
+5. Sesi mati sendiri mendekati jam ke-6. Mau mati sekarang → tombol **MATIKAN**.
+
+---
+
+## 5. Secrets & input
+
+**Wajib** (Settings repo → Secrets and variables → Actions):
+
+| Secret | Isi |
 |---|---|
-| **Lightshot** | Install via `winget` (Skillbrains.Lightshot), fallback installer langsung `app.prntscr.com` silent (`/VERYSILENT`). Auto-run saat user login. |
-| **Taskbar translucent** | `EnableTransparency=1` (efek transparansi Windows) + **TranslucentTB** (portable dari GitHub releases, fallback winget) mode default `clear` — bisa diganti: blur/acrylic/opaque/normal. |
-| **Wallpaper** | Dari `assets/wallpaper.*` di repo (default: `wallpaper.jpg`), atau input workflow `wallpaper_url`. Dipasang ke **profil Default** → otomatis aktif saat user RDP login pertama, plus diterapkan ke sesi live. |
-| **XyDesk host** | Menjalankan `https://rdp.xydesk.my.id/host.ps1` otomatis (RDP + QUIC UDP 4433 + AVC444 + audio bridge sesuai halaman host XyDesk). |
+| `RDP_PASSWORD` | password **tetap** user `xyadmin` — sekaligus password RustDesk. Min 8 karakter |
 
-Konfigurasi tersimpan di `assets/rdp-extras.json`:
-```json
-{
-  "lightshot": true,           // pasang Lightshot
-  "translucent": true,         // taskbar translucent
-  "translucent_mode": "clear", // clear | blur | acrylic | opaque | normal
-  "wallpaper": true,           // pakai wallpaper dari repo
-  "wallpaper_file": "wallpaper.jpg",
-  "xydesk_host": true          // jalankan setup host rdp.xydesk.my.id
-}
+**Opsional**:
+
+| Secret | Guna |
+|---|---|
+| `NGROK_AUTHTOKEN` | mengaktifkan provider ngrok (authtoken dari dashboard ngrok, gratis). Kosong = pakai bore.pub |
+| `CLEANUP_TOKEN` | PAT scope `repo` untuk hapus run Actions lama (tanpa ini run lama menumpuk) |
+
+Secret Tailscale lama (`TAILSCALE_AUTH_KEY`, `TAILSCALE_API_TOKEN`,
+`TAILSCALE_CLIENT_ID/SECRET`) **sudah tidak dipakai** — boleh dihapus.
+
+Input workflow (`Run workflow`):
+
+| Input | Isi |
+|---|---|
+| `durasi_menit` | 15 … 360 (batas keras job GitHub) |
+| `hostname` | nama sesi (dapat suffix nomor run, mis. `xyrdp-42`) |
+| `akses` | `keduanya` (default) · `rustdesk` · `tunnel` |
+| `tunnel_provider` | `otomatis` · `bore` · `ngrok` |
+| `win10` | `ya` (default) / `tidak` — tweak tampilan Windows 10 |
+| `ekstra` | `ya` (default) / `tidak` — Lightshot + wallpaper + taskbar translucent |
+| `wallpaper_url` | URL wallpaper sendiri (jpg/png/bmp); kosong = `assets/wallpaper*` |
+| `rd_server` | *(lanjutan)* server RustDesk sendiri/terdekat, mis. `rs-sg.rustdesk.com`; kosong = server publik |
+
+---
+
+## 6. Dashboard
+
+### Lokal
+```bash
+cd web
+node server.js          # butuh Node >= 18, tanpa npm install
+# → http://localhost:4173
 ```
-Semua itu bisa diubah **dari dashboard web** (panel "Tampilan & Aplikasi"):
-upload wallpaper (drag & drop, otomatis dikecilkan maks 1920px) + toggle
-translucent/Lightshot/XyDesk host. Dashboard menulis balik ke repo via GitHub API
-(pakai `GITHUB_TOKEN` scope `repo`), jadi berlaku di sesi **berikutnya** tanpa
-edit file manual. Catatan: VM sekali-pakai — tidak ada yang bisa "di-apply live"
-ke sesi yang sedang jalan.
+`web/config.json` (gitignored):
+```json
+{ "token": "ghp_...", "owner": "xykal", "repo": "XyRDP", "workflow": "rdp-6h.yml",
+  "branch": "main", "port": 4173, "rdp_user": "xyadmin", "rdp_password": "..." }
+```
+Token = PAT scope `repo` (dispatch run, baca log, tulis `assets/`).
+Dashboard **lokal** tidak punya login (memang untuk PC sendiri).
 
-## Setelah sesi selesai — otomatis bersih
-Step **Finalize** (selalu jalan, apa pun hasil sesi) melakukan:
-1. **Tailscale logout** + **hapus node dari tailnet** — butuh kredensial API
-   (lihat di bawah). Tanpa kredensial: node biarkan (key ephemeral = autohapus sendiri).
-2. **Status dibersihkan** — `rdp-status.json` di-set `inactive` dan IP/DNS/ID XyDesk
-   **dihapus** dari file publik (tidak ada jejak IP nyangkut di branch `status`).
-3. **Run Actions lama dihapus** (termasuk log-nya) — simpan 3 run terbaru
-   (`KEEP_RUNS`). Butuh secret `CLEANUP_TOKEN` (PAT scope `repo`).
-
-Kredensial Tailscale (pilih salah satu, set di Settings repo → Secrets):
-| Secret | Cara dapat |
-|---|---|
-| `TAILSCALE_CLIENT_ID` + `TAILSCALE_CLIENT_SECRET` | Tailscale admin console → Settings → OAuth clients (scope **`device:core`** / devices write). **Disarankan.** |
-| `TAILSCALE_API_TOKEN` | Tailscale admin console → Settings → Keys → API access tokens (scope **devices:write**) |
-| *(tidak ada)* | Pakai auth key **Ephemeral** → node autohapus otomatis saat logout |
-
-Cek hasilnya di log step Finalize: `device 'xyrdp-42' DIHAPUS dari tailnet (terverifikasi)`.
-
-## XyDesk ID & Password
-XyDesk Remote Host pakai **ID PC** (turunan dari IPv4, format `nnn-nnn-nnnn`) +
-**password login Windows**. Tiap sesi, `setup-extras.ps1` menghitung ID tersebut
-(sama seperti `XyDeskHost-Setup.bat`) dan menulisnya ke `rdp-status.json`, jadi
-**dashboard menampilkan XyDesk ID otomatis** (beserta tombol SALIN) di panel
-Koneksi. Password-nya = password RDP yang sama (sudah tampil di panel Koneksi).
-
-## Dashboard Vercel (produksi)
-URL produksi: **https://xyrdp-dash.vercel.app** — halaman terbuka tanpa login; SEMUA endpoint API butuh sesi.
-Login lewat form di web (custom, tanpa dialog browser); cookie `sid` HttpOnly 7 hari. Header `Authorization: Basic`
-tetap diterima sebagai fallback untuk curl/skrip. Kredensial dari env `AUTH_USER` / `AUTH_PASS` (bukan dari repo).
-UI: tanpa emoji, tanpa alert/confirm bawaan browser; stop sesi pakai tombol konfirmasi dua-klik.
-
-Env vars yang dipakai project `xyrdp-dash` (set via dashboard Vercel → Settings → Environment Variables, atau API):
-
-| Key | Type | Isi |
-|---|---|---|
-| `GITHUB_TOKEN` | sensitive | PAT dengan scope `repo` (buat dispatch/cancel/read logs) |
-| `RDP_PASSWORD` | sensitive | password tetap RDP (sama dgn secret Actions) |
-| `AUTH_USER` / `AUTH_PASS` | plain/sensitive | login Basic Auth web |
-| `GH_OWNER` `GH_REPO` `GH_WORKFLOW` `GH_BRANCH` `RDP_USER` | plain | `xykal` `XyRDP` `rdp-6h.yml` `main` `xyadmin` |
-
+### Deploy ke Vercel (tanpa apa pun yang jalan di PC-mu)
+Env vars project: `GITHUB_TOKEN`, `RDP_PASSWORD`, `AUTH_USER`, `AUTH_PASS`
+(+ opsional `GH_OWNER` `GH_REPO` `GH_WORKFLOW` `GH_BRANCH` `RDP_USER`).
+Endpoint API butuh sesi (cookie `sid`, HttpOnly); halaman login custom.
 Redeploy setelah ubah kode:
 ```bash
 cd deploy/vercel && npx vercel deploy --prod --yes --token <VercelToken>
 ```
-Config penting: `vercel.json` pakai `routes` legacy `/(.*) -> /api/index.js` supaya semua path lewat function (auth cookie dipegang aplikasi, bukan popup browser), dan `includeFiles: assets/**` supaya `index.html` ikut ke-bundle ke function.
 
-## Secrets repo (sudah dipasang)
-- `RDP_PASSWORD` — password **tetap** untuk user `xyadmin` (dipakai juga sebagai password XyDesk)
-- `TAILSCALE_AUTH_KEY` — auth key tailnet (harus `tskey-auth-...`)
-- `CLEANUP_TOKEN` — PAT scope `repo` untuk hapus run Actions lama (sudah dipasang)
-- `TAILSCALE_API_TOKEN` — *opsional*, kalau mau node dihapus otomatis dari admin console
-- `TAILSCALE_CLIENT_ID` + `TAILSCALE_CLIENT_SECRET` — *opsional*, alternatif OAuth (disarankan) untuk hapus node
+Panel **Tampilan** di dashboard: upload wallpaper (drag & drop, otomatis
+dikecilkan maks 1920px), toggle **TranslucentTB** (+mode), **Lightshot**,
+**Tweak tampilan Windows 10**, **Label "Windows 10 Pro"**. Perubahan ditulis ke
+`assets/rdp-extras.json` di repo → berlaku di sesi **berikutnya** (VM sekali-pakai,
+tidak ada yang bisa di-apply live).
 
-Password RDP **tidak pernah** muncul di log, commit, atau file status — hanya
-disimpan lokal di `web/config.json` (gitignored).
+---
 
-## Cara pakai
-1. Install **Tailscale** di PC/HP kamu, login ke **tailnet yang sama** dengan auth key di atas.
-2. Buka dashboard:
-   ```bash
-   cd web && node server.js      # butuh Node >= 18, tidak perlu npm install
-   ```
-   → http://localhost:4173 → tombol **NYALAKAN RDP**.
-   (atau manual: Actions → “XyRDP - Windows RDP 6 Jam” → Run workflow)
-3. Tunggu ±2–4 menit. Setelah status **LIVE**, dashboard menampilkan **IP Tailscale**.
-4. Remote Desktop Connection → alamat `100.x.x.x` → login `xyadmin` + password tetap.
-5. Sesi mati sendiri mendekati jam ke-6. Mau mati sekarang? tombol **MATIKAN**.
+## 7. Struktur status (branch `status` → `rdp-status.json`)
 
-## Mode bersih (default) + mode ekstra (otomatis)
-Base = Windows Server **apa adanya**. Yang dilakukan `setup-rdp.ps1` HANYA:
-- Buat user `xyadmin` ∈ **Administrators** + Remote Desktop Users (password tetap, tidak expire)
-- `LocalAccountTokenFilterPolicy=1` → supaya login jaringan dapat token admin penuh (ini bagian dari “akses admin”, bukan tweak)
-- Aktifkan Remote Desktop port 3389 dengan setting default Windows (NLA ON) + rule firewall grup “Remote Desktop”
-- Install + join Tailscale, tulis status
-
-Sesi dijamin **ADMINISTRATOR** (bukan user terbatas): user RDP selalu anggota grup
-Administrators, token admin penuh aktif, dan `setup-extras.ps1` memverifikasi
-keanggotaan grup tiap sesi (hasilnya masuk ke `rdp-status.json` → `extras.admin`
-dan tampil di dashboard).
-
-Tidak ada lagi: tweak UAC/Defender/SmartScreen/Chrome/auto-logon, dan cek reputasi
-IP sudah dihapus. Semua itu justru menambah variabel; sesuai request, balik ke vanilla.
-Di atas base itu, mode ekstra (Lightshot / wallpaper / translucent / XyDesk host)
-berjalan otomatis — lihat bagian “Mode ekstra” di atas. Matikan lewat input
-workflow `ekstra: tidak` kalau butuh VM benar-benar polos.
-
-## Login Google dari dalam RDP — fakta jujurnya
-Google menantang login berdasarkan **perangkat baru + IP datacenter (Azure)**,
-bukan karena setting di Windows. VM-nya sekali-pakai, jadi tiap sesi = “perangkat
-asing” di mata Google dan prompt verifikasi (notif HP / telepon / SMS) bisa muncul
-kapan pun; tidak ada tweak yang bisa menghapus itu.
-
-Yang tetap didukung kalau mau IP keluar yang “bersih”: input `exit_node`
-(Advanced, isi manual lewat Actions UI) — jalankan Tailscale di perangkat rumah
-lalu advertise exit node; trafik Chrome keluar dari IP residential.
-
-## Batas & risiko yang wajib tahu
-- ⚠️ **ToS GitHub**: Actions diperuntukkan build/test, bukan VPS interaktif.
-  Suka tidak suka, RDP-an 6 jam-an punya risiko **suspend akun** (public repo +
-  tidak agresif menekan risiko, tapi tidak menghilangkan). Jangan pakai akun utama.
-- **Kuota**: Windows runner dihitung 2×. Free plan 2000 menit/bulan ⇒ ≈2 sesi 6 jam.
-- **6 jam** adalah batas keras runner hosted — tidak bisa lebih; `timeout-minutes: 360`
-  + loop berhenti di menit ~354 supaya cleanup rapi (status menjadi `inactive`).
-- Repo sengaja **public** (sesuai preferensi untuk hindari suspend). Tidak ada
-  rahasia apa pun yang di-commit: token hidup di Secrets + config lokal.
-- Ini VM sekali-pakai: apa pun di `C:\` hilang setelah job selesai. Simpan data
-  ke Google Drive/OneDrive lewat browser.
-
-## Struktur status (branch `status` → `rdp-status.json`)
 ```json
-{ "active": true, "tailscale_ip": "100.x.y.z", "tailscale_dns": "xyrdp-12.tailnet.ts.net",
-  "rdp_user": "xyadmin", "started_at": "...", "expires_at": "...",
+{
+  "active": true,
+  "hostname": "xyrdp-7",
+  "os": "Microsoft Windows Server 2022 Datacenter", "os_build": "10.0.20348",
+  "os_style": "Windows 10 look",
+  "rdp_user": "xyadmin", "rdp_port": 3389,
+  "started_at": "…", "expires_at": "…",
+  "akses": {
+    "mode": "keduanya",
+    "rustdesk": { "status": "ok", "id": "1234567890", "server": "server publik bawaan" },
+    "tunnel":   { "status": "ok", "provider": "bore", "host": "bore.pub", "port": 47321,
+                  "address": "bore.pub:47321" }
+  },
+  "win10": { "look": "ok", "badge": "ok", "wallpaper": "ok", "search": "ok" },
   "extras": { "lightshot": "ok", "translucent": "ok", "wallpaper": "ok",
-              "wallpaper_file": "wallpaper.jpg", "xydesk_host": "ok",
-              "xydesk_id": "168-375-2296", "xydesk_ids": [ { "iface": "...", "ip": "...", "id": "..." } ],
-              "admin": true } }
+              "wallpaper_file": "wallpaper-win10.jpg", "admin": true }
+}
 ```
-Saat sesi mati, `active=false`, `stopped_at` diisi, dan IP/DNS/`xydesk_id` dikosongkan.
-Web mem-poll file ini + status run; tidak ada server perantara yang di-hosting.
-Panel “Sesi” di dashboard menampilkan ringkasan `extras` (termasuk bukti sesi admin),
-dan panel “Koneksi” menampilkan **XyDesk ID** untuk dipakai bersama password RDP.
+Saat sesi mati: `active=false`, `stopped_at` diisi, dan **ID RustDesk + alamat
+tunnel dikosongkan** dari file publik (tidak ada endpoint nyangkut di branch
+`status`). Password **tidak pernah** masuk log/commit/file status.
 
-## Input workflow (Run workflow di Actions UI)
-| Input | Isi |
-|---|---|
-| `durasi_menit` | 15 … 360 (batas keras job GitHub) |
-| `ts_hostname` | hostname Tailscale ( dapat suffix nomor run, mis. `xyrdp-42`) |
-| `ekstra` | `ya` (default) / `tidak` — master switch Lightshot+wallpaper+translucent+XyDesk host |
-| `wallpaper_url` | URL wallpaper sendiri (jpg/png/bmp); kosong = pakai `assets/wallpaper.*` di repo |
-| `exit_node` | (lanjutan) Tailscale exit node |
+---
 
-## Troubleshooting
-| Gejala | Penyebab umum |
+## 8. Batas & risiko yang wajib tahu
+
+- ⚠️ **ToS GitHub**: Actions untuk build/test, bukan VPS interaktif — RDP 6 jam-an
+  berisiko **suspend akun**. Jangan pakai akun utama.
+- **Kuota**: runner Windows dihitung 2×. Free plan 2000 menit/bulan ⇒ ≈2 sesi 6 jam.
+- **6 jam** batas keras runner hosted: `timeout-minutes: 360` + loop berhenti di
+  menit ~354 supaya cleanup rapi.
+- **RustDesk publik**: relay pihak ketiga (gratis, tanpa jaminan). Kalau sedang
+  down/lambat, ID tidak muncul → pakai jalur tunnel, atau set `rd_server`.
+- **bore.pub**: server publik komunitas, port acak, tanpa jaminan uptime; kalau
+  gagal membuat tunnel, jalur RustDesk tetap jalan (dan sebaliknya).
+- **Login Google di dalam VM**: VM sekali-pakai + IP datacenter (Azure) = selalu
+  dianggap perangkat asing → verifikasi HP/SMS bisa muncul. Tidak ada tweak yang
+  menghapus itu (dulu bisa "disiasati" pakai Tailscale exit node; sekarang tidak).
+- VM sekali-pakai: apa pun di `C:\` hilang setelah job selesai. Simpan data ke
+  Google Drive/OneDrive lewat browser di dalam VM.
+- Runner **`windows-2022`** masih didukung, tapi jangan kaget kalau suatu saat
+  di-deprecate — kalau itu terjadi, ganti `runs-on` ke image Server terbaru dan
+  tweak di `setup-win10.ps1` tetap relevan (tampilan jadi mirip Windows 11).
+
+---
+
+## 9. Troubleshooting
+
+| Gejala | Penyebab / solusi |
 |---|---|
-| `ERROR: secret RDP_PASSWORD/TAILSCALE_AUTH_KEY` | Secrets belum diset / nama salah |
-| `tidak dapat IP Tailscale` | Auth key kadaluarsa/revoked, atau tailnet butuh “add devices manually”. Buat key baru (recommend centang **Ephemeral** + **Reusable**) |
-| RDP connect ditolak | Pastikan Tailscale di perangkatmu login ke tailnet yang sama (`tailscale status` harus melihat `xyrdp-*`) |
-| Google tetap minta verifikasi | Wajar untuk IP datacenter — pakai `exit_node` |
-| Run kedua “menggantung” | Sengaja: `concurrency` mengantrekan agar tidak 2 VM sekaligus |
-| Node Tailscale nyangkut "offline" di console | Set `TAILSCALE_API_TOKEN` (devices:write) atau OAuth `TAILSCALE_CLIENT_ID/SECRET` (device:core), atau pakai auth key **Ephemeral** |
-| Log `butuh secret CLEANUP_TOKEN` | Tanpa itu run lama tidak bisa dihapus (GITHUB_TOKEN Actions cuma actions:read). Pasang PAT scope `repo` sebagai `CLEANUP_TOKEN` |
-| Log `lightshot=gagal` / `translucent=sebagian` | Tidak fatal — cek log step “Setup ekstra”: winget/website vendor sedang sag atau terganti. Sesi tetap jalan |
-| Wallpaper tidak berubah di sesi baru | Cek `assets/wallpaper.jpg` ada di repo & `wallpaper: true` di `rdp-extras.json`; di dashboard panel “Tampilan” harus muncul pratinjau |
-| Taskbar tidak translucent | Efek native tetap aktif; TranslucentTB portable butuh Windows 10/11 — kalau gagal, ganti mode lewat tray icon |
-| Upload wallpaper error dari dashboard | `GITHUB_TOKEN` Vercel/lokal harus scope `repo` + branch `main`; gambar maks 3 MB setelah dikecilkan |
+| `ERROR: secret RDP_PASSWORD …` | Secret belum diset / kurang dari 8 karakter |
+| RustDesk ID kosong di dashboard | Service RustDesk belum register ke server publik. Cek log step **Setup akses**; coba sesi berikutnya, atau isi `rd_server` |
+| Tidak bisa konek RustDesk | Pastikan klienmu memakai server yang sama (default = publik). Kalau kamu set `RD_SERVER`, klienmu juga harus diarahkan ke server itu |
+| Tunnel tidak muncul | bore.pub sedang sibuk, atau token ngrok salah/kosong. Coba provider lain (`otomatis` mencoba ngrok lalu bore) |
+| `mstsc` menolak konek | Pakai alamat **persis** `host:port` dari dashboard; tunnel hidup hanya selama sesi |
+| Taskbar tidak translucent | Efek native tetap aktif; TranslucentTB portable butuh Windows 10/11 — kalau gagal, ganti mode via tray icon |
+| Label "Windows 10 Pro" | Kosmetik (registry). `winver`/About bisa tetap menampilkan nama Server — branding Windows di folder `branding` milik TrustedInstaller, tidak diubah |
+| Log `butuh secret CLEANUP_TOKEN` | Tanpa PAT scope `repo`, run lama tidak bisa dihapus (GITHUB_TOKEN Actions cuma `actions:read`) |
+| Mencari "Tailscale" di repo | Sudah dihapus sepenuhnya di v2 — lihat §3 |

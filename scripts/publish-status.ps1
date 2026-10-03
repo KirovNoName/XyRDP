@@ -18,14 +18,23 @@ $json = Get-Content $src -Raw | ConvertFrom-Json
 if (-not $Active) {
   $json | Add-Member -NotePropertyName stopped_at -NotePropertyValue (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') -Force
   $json.active = $false
-  # sesi mati -> jangan tinggalkan IP/DNS/ID di file publik (branch status)
-  $json.tailscale_ip  = ''
-  $json.tailscale_dns = ''
+  # sesi mati -> jangan tinggalkan endpoint koneksi di file publik (branch status)
+  if ($json.PSObject.Properties['akses']) {
+    if ($json.akses.PSObject.Properties['rustdesk']) { $json.akses.rustdesk.id = '' }
+    if ($json.akses.PSObject.Properties['tunnel']) {
+      $json.akses.tunnel.host    = ''
+      $json.akses.tunnel.port    = 0
+      $json.akses.tunnel.address = ''
+    }
+  }
+  # sisa field lama (versi Tailscale/XyDesk) kalau masih ada di file
+  if ($json.PSObject.Properties['tailscale_ip'])  { $json.tailscale_ip  = '' }
+  if ($json.PSObject.Properties['tailscale_dns']) { $json.tailscale_dns = '' }
   if ($json.PSObject.Properties['extras']) {
     if ($json.extras.PSObject.Properties['xydesk_id'])  { $json.extras.xydesk_id  = '' }
     if ($json.extras.PSObject.Properties['xydesk_ids']) { $json.extras.xydesk_ids = @() }
   }
-  Log 'status inactive: IP/DNS/ID XyDesk dibersihkan dari file publik'
+  Log 'status inactive: ID RustDesk + alamat tunnel dibersihkan dari file publik'
 }
 $json | ConvertTo-Json -Depth 6 | Set-Content -Path $src -Encoding utf8
 

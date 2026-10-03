@@ -1,22 +1,22 @@
-name: XyRDP - Windows RDP 6 Jam (Tailscale)
-run-name: "XyRDP ${{ inputs.ts_hostname || 'xyrdp' }} • ${{ inputs.durasi_menit || '360' }} menit"
+name: XyRDP - Windows 10 Style RDP 6 Jam (RustDesk / Tunnel)
+run-name: "XyRDP ${{ inputs.hostname || 'xyrdp' }} • ${{ inputs.durasi_menit || '360' }} mnt • ${{ inputs.akses || 'keduanya' }}"
 
 # ============================================================================
-#  XyRDP — Windows Server RDP via GitHub Actions + Tailscale — MODE BERSIH
-#  - runs-on: windows-latest (Windows Server 2022, Azure datacenter)
-#  - TANPA tweak: tidak mengubah UAC/Defender/SmartScreen/Chrome/dsb.
-#    Hanya: user Administrators + Remote Desktop aktif + join Tailscale.
-#  - Sesi RDP ditahan PERSIS sampai durasi (max 360 menit = 6 jam, limit GitHub)
-#  - Akses masuk via Tailscale (IP 100.x.x.x), tidak ada port publik dibuka
-#  - Status session ditulis ke branch `status` -> dibaca web dashboard
-#  - Password TIDAK PERNAH ditulis ke log, commit, maupun file status
+#  XyRDP v2 — Windows "gaya 10" di runner GitHub, akses TANPA Tailscale dan
+#  TANPA apa pun yang di-self-host:
 #
-#  EKSTRA (otomatis, bisa dimatikan lewat input "ekstra"):
-#    - Lightshot (screenshot) terpasang & auto-run
-#    - Taskbar translucent (TranslucentTB + efek transparansi Windows)
-#    - Wallpaper dari assets/wallpaper.* di repo (upload via web dashboard)
-#    - XyDesk host setup (rdp.xydesk.my.id/host.ps1) dijalankan otomatis
-#  Konfigurasi ekstra: assets/rdp-extras.json (bisa diubah dari dashboard web)
+#   - runs-on: windows-2022  = Windows Server 2022 (build 10.0.20348) yang
+#     UI/kernel-nya SAMA dengan Windows 10 21H2, lalu di-tweak
+#     (setup-win10.ps1) supaya terasa Windows 10, bukan Server.
+#     CATATAN: runner GitHub tidak menyediakan image Windows 10 desktop;
+#     windows-2022 adalah yang paling dekat + tweak.
+#   - Akses 1: RustDesk (relay publik rs-*.rustdesk.com, gratis, tanpa VPN)
+#   - Akses 2: tunnel TCP ke port 3389 -> Remote Desktop Connection (mstsc)
+#     provider: bore.pub (tanpa akun) atau ngrok (butuh NGROK_AUTHTOKEN)
+#   - Tidak ada port publik di VM; 3389 hanya ditembus lewat tunnel/RustDesk
+#   - Sesi ditahan sampai durasi (maks 360 menit = batas keras GitHub)
+#   - Status sesi ditulis ke branch `status` -> dibaca dashboard web
+#   - Password TIDAK PERNAH masuk log/commit/file status
 # ============================================================================
 
 on:
@@ -37,13 +37,39 @@ on:
           - "300"
           - "330"
           - "360"
-      ts_hostname:
-        description: "Hostname Tailscale (akan dapat suffix nomor run, mis: xyrdp-42)"
+      hostname:
+        description: "Hostname sesi (dapat suffix nomor run, mis: xyrdp-42)"
         required: false
         default: "xyrdp"
         type: string
+      akses:
+        description: "Jalur akses: RustDesk (app), tunnel RDP (mstsc), atau keduanya"
+        required: false
+        default: "keduanya"
+        type: choice
+        options:
+          - "keduanya"
+          - "rustdesk"
+          - "tunnel"
+      tunnel_provider:
+        description: "Provider tunnel RDP (kalau akses pakai tunnel)"
+        required: false
+        default: "otomatis"
+        type: choice
+        options:
+          - "otomatis"
+          - "bore"
+          - "ngrok"
+      win10:
+        description: "Tweak tampilan Windows 10 (Server Manager mati, personalisasi, wallpaper, label)"
+        required: false
+        default: "ya"
+        type: choice
+        options:
+          - "ya"
+          - "tidak"
       ekstra:
-        description: "Ekstra otomatis: Lightshot + wallpaper + taskbar translucent + XyDesk host setup"
+        description: "Ekstra otomatis: Lightshot + wallpaper + taskbar translucent"
         required: false
         default: "ya"
         type: choice
@@ -51,12 +77,12 @@ on:
           - "ya"
           - "tidak"
       wallpaper_url:
-        description: "(OPSIONAL) URL wallpaper sendiri (jpg/png/bmp). Kosong = pakai assets/wallpaper.* di repo"
+        description: "(OPSIONAL) URL wallpaper sendiri (jpg/png/bmp). Kosong = pakai assets/wallpaper*.jpg"
         required: false
         default: ""
         type: string
-      exit_node:
-        description: "(OPSIONAL/lanjutan) Tailscale exit node. Kosong = bawaan. Bisa juga diisi manual lewat Actions UI"
+      rd_server:
+        description: "(LANJUTAN) Server RustDesk sendiri/terdekat, mis: rs-sg.rustdesk.com. Kosong = server publik bawaan"
         required: false
         default: ""
         type: string
@@ -72,23 +98,25 @@ concurrency:
 
 jobs:
   rdp:
-    runs-on: windows-latest
-    # Limit keras job runner hosted = 360 menit (6 jam). Jangan naikkan:
-    # di atas itu job di-kill GitHub.
+    # windows-2022 = Server 2022 (UI/kernel Windows 10 21H2). Jangan pakai
+    # windows-latest: sejak Juni 2026 label itu = Windows Server 2025 (UI Win11).
+    runs-on: windows-2022
+    # Batas keras job runner hosted = 360 menit. Jangan naikkan.
     timeout-minutes: 360
 
     env:
       DUR: ${{ inputs.durasi_menit }}
-      TS_HOSTNAME: ${{ inputs.ts_hostname }}
+      HOSTNAME: ${{ inputs.hostname }}
+      AKSES: ${{ inputs.akses }}
+      TUNNEL_PROVIDER: ${{ inputs.tunnel_provider }}
+      WIN10: ${{ inputs.win10 }}
       EXTRAS: ${{ inputs.ekstra }}
       WALLPAPER_URL: ${{ inputs.wallpaper_url }}
-      EXIT_NODE: ${{ inputs.exit_node }}
+      RD_SERVER: ${{ inputs.rd_server }}
       RDP_USER: xyadmin
       RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
-      TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
-      TAILSCALE_API_TOKEN: ${{ secrets.TAILSCALE_API_TOKEN }}
-      TAILSCALE_CLIENT_ID: ${{ secrets.TAILSCALE_CLIENT_ID }}
-      TAILSCALE_CLIENT_SECRET: ${{ secrets.TAILSCALE_CLIENT_SECRET }}
+      # ngrok (opsional): akun gratis -> authtoken -> secret repo. Kosong = pakai bore.pub
+      NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
       # PAT scope repo — buat hapus run lama (opsional; kosong = cleanup dilewati)
       CLEANUP_TOKEN: ${{ secrets.CLEANUP_TOKEN }}
       KEEP_RUNS: "3"
@@ -100,25 +128,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup RDP + Tailscale (bersih)
+      - name: Info lingkungan (OS + versi)
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          Write-Host "[XyRDP] OS runner : $($os.Caption) build $($os.Version)"
+          Write-Host "[XyRDP] Catatan    : UI/kernel sama dengan Windows 10 21H2; tweak Win10 dijalankan terpisah"
+
+      - name: Setup dasar (user admin + RDP 3389)
         shell: pwsh
         run: ./scripts/setup-rdp.ps1
 
-      - name: Setup ekstra (Lightshot + wallpaper + translucent + XyDesk host)
+      - name: Tweak tampilan Windows 10 (Server Manager, personalisasi, wallpaper)
+        if: ${{ inputs.win10 != 'tidak' }}
+        shell: pwsh
+        run: ./scripts/setup-win10.ps1
+
+      - name: Setup ekstra (Lightshot + wallpaper + taskbar translucent)
         if: ${{ inputs.ekstra != 'tidak' }}
         shell: pwsh
         run: ./scripts/setup-extras.ps1
+
+      - name: Setup akses (RustDesk + tunnel RDP) — tanpa Tailscale
+        shell: pwsh
+        run: ./scripts/setup-akses.ps1
 
       - name: Publish status ke branch 'status'
         continue-on-error: true
         shell: pwsh
         run: ./scripts/publish-status.ps1 -Active $true
 
-      - name: Tahan sesi sampai durasi habis (6 jam)
+      - name: Tahan sesi sampai durasi habis
         shell: pwsh
         run: ./scripts/keepalive.ps1
 
-      - name: Finalize (matikan status, tailscale logout + hapus node, bersih-bersih run lama)
+      - name: Finalize (matikan akses, bersihkan status, hapus run lama)
         if: always()
         continue-on-error: true
         shell: pwsh

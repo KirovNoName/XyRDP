@@ -102,7 +102,7 @@ async function readLog(runId) {
 
 // ---- konfigurasi ekstra (assets/rdp-extras.json di repo) + wallpaper ----
 const EXTRAS_PATH = 'assets/rdp-extras.json';
-const EXTRAS_DEFAULTS = { lightshot: true, translucent: true, translucent_mode: 'clear', wallpaper: true, wallpaper_file: 'wallpaper.jpg', xydesk_host: true };
+const EXTRAS_DEFAULTS = { lightshot: true, translucent: true, translucent_mode: 'clear', wallpaper: true, wallpaper_file: 'wallpaper.jpg', win10_look: true, win10_badge: true, win10_wallpaper: true };
 const WALLPAPER_RE = /^wallpaper\.(jpg|jpeg|png|bmp)$/i;
 
 async function readRepoFile(path) {
@@ -155,15 +155,23 @@ async function handle(req, res) {
       if ((!session || !session.active) && run && (run.status === 'in_progress' || run.status === 'queued')) {
         try {
           const txt = await readLog(run.id);
-          const mIp = txt.match(/TAILNET IP\s*:\s*(100\.\d+\.\d+\.\d+)/);
-          const mDns = txt.match(/MAGICDNS\s*:\s*(\S+)/);
-          const mEnds = txt.match(/SESI SIAP/) ? (txt.match(/Durasi sesi\s*:\s*(\d+) menit/) || [])[1] : null;
-          if (mIp) {
+          const mRd = txt.match(/RUSTDESK ID\s*:\s*([0-9][0-9\s]{5,14})/);
+          const mTun = txt.match(/TUNNEL\s*:\s*([A-Za-z0-9.\-]+):(\d+)/);
+          if (mRd || mTun) {
+            const rdId = mRd ? mRd[1].replace(/\s+/g, '') : '';
             session = {
-              active: true, tailscale_ip: mIp[1], tailscale_dns: mDns ? mDns[1] : '',
+              active: true,
               rdp_port: 3389, rdp_user: CFG.rdp_user || 'xyadmin',
               started_at: run.run_started_at || run.created_at,
-              expires_at: new Date(Date.parse(run.run_started_at || run.created_at) + (+mEnds || 360) * 60000).toISOString(),
+              expires_at: new Date(Date.parse(run.run_started_at || run.created_at) + 360 * 60000).toISOString(),
+              akses: {
+                mode: 'keduanya',
+                rustdesk: { status: rdId ? 'ok' : 'pending', id: rdId, server: 'server publik bawaan' },
+                tunnel: {
+                  status: mTun ? 'ok' : 'pending', provider: '', host: mTun ? mTun[1] : '',
+                  port: mTun ? Number(mTun[2]) : 0, address: mTun ? `${mTun[1]}:${mTun[2]}` : '',
+                },
+              },
               source: 'log',
             };
           }
@@ -186,7 +194,10 @@ async function handle(req, res) {
       const p = JSON.parse(body || '{}');
       const inputs = {
         durasi_menit: String(p.durasi || '360'),
-        ts_hostname: String(p.hostname || 'xyrdp').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 30) || 'xyrdp',
+        hostname: String(p.hostname || 'xyrdp').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 30) || 'xyrdp',
+        akses: ['keduanya', 'rustdesk', 'tunnel'].includes(String(p.akses)) ? String(p.akses) : 'keduanya',
+        tunnel_provider: ['otomatis', 'bore', 'ngrok'].includes(String(p.tunnel_provider)) ? String(p.tunnel_provider) : 'otomatis',
+        win10: (p.win10 === 'tidak' ? 'tidak' : 'ya'),
       };
       await gh('POST', `/repos/${owner}/${repo}/actions/workflows/${workflow}/dispatches`, { ref: branch, inputs });
       return send(200, { ok: true, inputs });
@@ -232,7 +243,10 @@ async function handle(req, res) {
       const p = JSON.parse(body || '{}');
       const { json: cur, sha } = await readRepoFile(EXTRAS_PATH);
       const next = Object.assign({}, EXTRAS_DEFAULTS, cur || {});
-      for (const k of ['lightshot', 'translucent', 'wallpaper', 'xydesk_host']) {
+      for (const k of ['lightshot', 'translucent', 'wallpaper']) {
+        if (k in p) next[k] = !!p[k];
+      }
+      for (const k of ['win10_look', 'win10_badge', 'win10_wallpaper']) {
         if (k in p) next[k] = !!p[k];
       }
       if (p.translucent_mode) {
