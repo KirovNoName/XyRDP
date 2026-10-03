@@ -200,4 +200,6 @@ Update-Status @{ win10 = [ordered]@{
 } } | Out-Null
 
 Log "SELESAI — win10 look=ok badge=$badgeStatus wallpaper=$wallStatus search=$searchStatus"
+try { Probe-Rdp 'akhir step' | Out-Null } catch {}
+
 exit 0

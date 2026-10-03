@@ -326,6 +326,15 @@ function Wait-RdpReady([int]$TimeoutSec = 240, [int]$Port = 3389) {
   return $null
 }
 
+# probe satu baris: dipakai untuk melacak step mana yang merusak RDP
+function Probe-Rdp([string]$Where, [string]$Address = '127.0.0.1') {
+  $state = Get-RdpListenerState 3389
+  $r = Test-RdpHandshake $Address 3389 5000
+  $txt = if ($r.ok) { 'handshake ok' } else { "handshake GAGAL ($($r.detail))" }
+  Log "  [probe] $Where -> $txt | listener: $state"
+  return $r.ok
+}
+
 # ---------- unduhan ----------
 function Get-File([string]$Url, [string]$OutFile, [int]$TimeoutSec = 180) {
   for ($i = 1; $i -le 3; $i++) {

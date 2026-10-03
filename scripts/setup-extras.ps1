@@ -263,4 +263,6 @@ Close-DefaultHive
 
 $adminTxt = $(if ($adminOk) { 'YA' } else { 'TIDAK' })
 Log ("SELESAI — lightshot={0} translucent={1} wallpaper={2} admin={3}" -f $resLightshot, $resTrans, $resWall, $adminTxt)
+try { Probe-Rdp 'akhir step' | Out-Null } catch {}
+
 exit 0

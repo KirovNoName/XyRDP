@@ -47,6 +47,7 @@ $tsPol  = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows NT\T
 $tsTcp  = "$tsRoot\WinStations\RDP-Tcp"
 
 # ---------- 1. RDP: multi-session + audio ----------
+$rdpAlive0 = Probe-Rdp 'sebelum tweak xydesk'
 $okDeny  = Set-Reg $tsRoot 'fDenyTSConnections'   0 'DWord'
 $okMulti = Set-Reg $tsRoot 'fSingleSessionPerUser' 0 'DWord'
 Set-Reg $tsPol 'fDenyTSConnections'   0 'DWord' | Out-Null
@@ -73,6 +74,7 @@ $fontTxt = if ($okFs1 -and $okFs2) { 'ok' } elseif ($okFs1 -or $okFs2) { 'sebagi
 Log "  font smoothing: $fontTxt (fNoFontSmoothing=0, AllowFontAntiAlias=1 di WinStations\RDP-Tcp)"
 if ($fontTxt -ne 'ok') { Log '  (kalau gagal: teks di sesi bisa tampak kurang halus)' }
 
+$rdpAlive1 = Probe-Rdp 'setelah tulis registry RDP/TS'
 # ---------- 4. Firewall (dibuka di VM; dari luar tetap hanya via tunnel) ----------
 function Add-FwRule([string]$Name, [string]$Proto, [string]$Ports) {
   try {
@@ -87,6 +89,7 @@ $fwUdp  = Add-FwRule 'XyDesk Remote RDP UDP'  'UDP' '3389'
 $fw4433 = Add-FwRule 'XyDesk Remote QUIC UDP' 'UDP' '4433'
 Enable-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue | Out-Null
 Log "  firewall: TCP3389=$fwTcp UDP3389=$fwUdp UDP4433=$fw4433"
+$rdpAlive2 = Probe-Rdp 'setelah aturan firewall'
 
 # ---------- 5. Layanan ----------
 $svcOk = @()
@@ -100,6 +103,7 @@ foreach ($svc in @('TermService', 'Audiosrv')) {
 try { Start-Service -Name 'UmRdpService' -ErrorAction SilentlyContinue } catch {}
 $svcTxt = if ($svcOk.Count -eq 2) { 'ok' } elseif ($svcOk.Count -eq 1) { "sebagian ($($svcOk[0]) hidup)" } else { 'gagal' }
 Log "  layanan: $svcTxt"
+$rdpAlive3 = Probe-Rdp 'setelah start layanan'
 
 # ---------- 6. Jalur akses yang dipakai dari HP ----------
 $st = Read-Status
@@ -112,15 +116,14 @@ if ($addr) {
 }
 Log '  catatan: audio bridge QUIC (UDP 4433) hanya jalan kalau HP reach UDP langsung; lewat tunnel TCP klien otomatis fallback ke audio RDP (suara tetap ada)'
 
-# ---------- 6b. Terapkan kebijakan ke TermService + verifikasi RDP benar-benar siap ----------
-# fSingleSessionPerUser & kebijakan TS baru aktif setelah TermService dibuat ulang.
-# Ini juga memindahkan "jeda" listener (yang terlihat di validasi 2026-10-03)
-# ke step ini, jadi setup-akses tinggal memakai RDP yang sudah terbukti menjawab.
-try { Restart-Service TermService -Force -ErrorAction Stop; Log '  TermService di-restart supaya kebijakan multi-sesi/grafis aktif' }
-catch { Log "  restart TermService: $($_.Exception.Message)" }
-$rdpReadyAt = Wait-RdpReady -TimeoutSec 120
-if ($rdpReadyAt) { Log "  RDP terverifikasi siap di $rdpReadyAt`:3389 (handshake X.224 OK)" }
-else { Log '  PERINGATAN: RDP belum menjawab handshake setelah tweak (setup-akses akan menunggu lagi)' }
+# ---------- 6b. Verifikasi RDP masih hidup setelah tweak ----------
+# CATATAN PENTING (validasi 2026-10-03): setelah tweak, listener 3389 di runner
+# ini sempat mati ~2 menit. Kita TIDAK me-restart TermService lagi (restart tidak
+# membantu, malah memperlama mati) — kita cukup mengukur dan melaporkan apa
+# adanya supaya setup-akses tahu harus menunggu berapa lama.
+$rdpReadyAt = Wait-RdpReady -TimeoutSec 150
+if ($rdpReadyAt) { Log "  RDP masih sehat setelah tweak: $rdpReadyAt`:3389 (handshake X.224 OK)" }
+else { Log '  PERINGATAN: RDP belum menjawab handshake setelah tweak — setup-akses akan menunggu lagi' }
 
 # ---------- 7. Status (apa adanya, bukan asumsi) ----------
 $allOk = $okDeny -and $okMulti -and $okAudio -and $okMic -and $okAvc -and $okAvc2 -and ($fontTxt -eq 'ok')
@@ -135,6 +138,7 @@ Update-Status @{ xydesk = [ordered]@{
     firewall      = "tcp3389=$fwTcp udp3389=$fwUdp udp4433=$fw4433"
     services      = $svcTxt
     rdp_ready     = if ($rdpReadyAt) { "$rdpReadyAt (handshake OK)" } else { 'belum' }
+    rdp_probe     = "awal=$rdpAlive0 reg=$rdpAlive1 fw=$rdpAlive2 svc=$rdpAlive3"
     quic_udp4433  = 'dibuka di VM (tidak lewat tunnel TCP)'
     akses         = if ($addr) { $addr } else { '(menyusul)' }
     note          = if ($allOk) { 'Host siap dipakai klien XyDesk Remote mode Koneksi RDP (Host+Port tunnel)' }
