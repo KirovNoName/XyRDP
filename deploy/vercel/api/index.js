@@ -67,16 +67,18 @@ async function gh(method, apiPath, body) {
 
 let statusCache = { at: 0, data: null };
 async function fetchStatusFile() {
-  if (Date.now() - statusCache.at < 8000) return statusCache.data;
+  if (Date.now() - statusCache.at < 5000) return statusCache.data;
   let data = null;
+  // Contents API dulu = selalu segar (alamat tunnel berganti tiap sesi; alamat
+  // lama bikin klien HP kena "koneksi ditolak/ditutup").
   try {
-    const r = await fetch(STATUS_RAW + `?t=${Math.floor(Date.now() / 60000)}`);
-    if (r.ok) data = JSON.parse(await r.text());
+    const c = await gh('GET', `/repos/${CFG.owner}/${CFG.repo}/contents/rdp-status.json?ref=status&t=${Date.now()}`);
+    if (c && c.content) data = JSON.parse(Buffer.from(c.content, 'base64').toString('utf8'));
   } catch {}
   if (!data) {
     try {
-      const c = await gh('GET', `/repos/${CFG.owner}/${CFG.repo}/contents/rdp-status.json?ref=status`);
-      if (c && c.content) data = JSON.parse(Buffer.from(c.content, 'base64').toString('utf8'));
+      const r = await fetch(STATUS_RAW + `?t=${Date.now()}`, { cache: 'no-store' });
+      if (r.ok) data = JSON.parse(await r.text());
     } catch {}
   }
   statusCache = { at: Date.now(), data };

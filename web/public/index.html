@@ -128,7 +128,9 @@
       <div class="row"><span class="k">Jalur yang dipakai</span><span class="v" id="cMode">-</span></div>
       <div class="row"><span class="k">Host &amp; Port (XyDesk / mstsc)</span>
         <span class="v"><span id="cTun">-</span> <button class="mini" data-copy="cTunHost">SALIN HOST</button>
-        <button class="mini" data-copy="cTunPort">SALIN PORT</button></span></div>
+        <button class="mini" data-copy="cTunPort">SALIN PORT</button>
+        <button class="mini" data-copy="cTunAll">SALIN HOST:PORT</button></span></div>
+      <div class="hint" id="cWarn"></div>
       <div class="row"><span class="k">Kesiapan RDP di VM</span><span class="v" id="cRdp">-</span></div>
       <div class="row"><span class="k">Server RustDesk</span><span class="v" id="cRdSrv">-</span></div>
       <div class="row"><span class="k">Pengguna</span>
@@ -166,8 +168,8 @@
       <div class="two">
         <div><label>Jalur akses</label>
           <select id="fAkses">
-            <option value="tunnel" selected>Tunnel RDP saja (XyDesk/mstsc) — tercepat</option>
-            <option value="keduanya">Keduanya (tunnel XyDesk + RustDesk)</option>
+            <option value="keduanya" selected>Keduanya (tunnel XyDesk + RustDesk) — paling aman</option>
+            <option value="tunnel">Tunnel RDP saja (XyDesk/mstsc) — tercepat</option>
             <option value="rustdesk">RustDesk saja (cadangan)</option>
           </select></div>
         <div><label>Provider tunnel</label>
@@ -337,6 +339,16 @@
       var xd=g&&g.xydesk?g.xydesk:null;
       setTxt('cRdp',(xd&&xd.rdp_ready)?xd.rdp_ready:(g&&g.rdp_listen?String(g.rdp_listen):'-'));
       setTxt('cTunNote',(a&&a.tunnel&&a.tunnel.selftest!=='ok'&&a.tunnel.note2)?('Catatan tunnel: '+a.tunnel.note2):'');
+      // peringatan kejujuran: alamat hanya berlaku untuk sesi yang sedang jalan
+      var warnEl=$('cWarn');
+      if(warnEl){
+        var w='',wc='';
+        if(!(g&&g.active)){w='⚠️ TIDAK ADA SESI AKTIF. Alamat di atas (kalau ada) sudah tidak berlaku — alamat tunnel BERGANTI setiap sesi baru, jadi jangan pakai alamat dari sesi sebelumnya. Tekan MULAI, lalu tunggu ±5 menit sampai status AKTIF dan "Kesiapan RDP" hijau.';wc='bad'}
+        else if(!tun){w='⏳ Sesi sedang disiapkan / tunnel belum terbentuk. Tunggu ±5 menit lalu muat ulang halaman ini — alamat akan muncul di baris di atas.'}
+        else if(a&&a.tunnel&&a.tunnel.selftest!=='ok'){w='⚠️ Tunnel hidup tapi uji end-to-end belum lolos — coba lagi sebentar, atau pakai RustDesk.';wc='bad'}
+        else {w='✅ Alamat ini segar dari sesi yang sedang jalan'+(g&&g.run_number?(' (run #'+g.run_number+')'):'')+(en?(' dan berlaku sampai '+fmt(en)):'')+'.';wc='ok'}
+        warnEl.textContent=w;warnEl.className='hint'+(wc?(' note '+wc):'');
+      }
       cTunRaw=tun;
       t0=st?Date.parse(st):null; t1=en?Date.parse(en):null; tickLeft();
       var key=(rdId||'')+'|'+(tun||'');
@@ -390,6 +402,7 @@
       else if(src==='cRdId')txt=$('cRdId').textContent;
       else if(src==='cTunHost')txt=cTunRaw?cTunRaw.split(':')[0]:'';
       else if(src==='cTunPort')txt=cTunRaw?cTunRaw.split(':')[1]:'';
+      else if(src==='cTunAll')txt=cTunRaw||'';
       function done(){b.textContent='TERSALIN';setTimeout(function(){b.textContent='SALIN'},1200)}
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done)}
       else{var t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);

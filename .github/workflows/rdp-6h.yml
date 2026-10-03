@@ -45,7 +45,7 @@ on:
       akses:
         description: "Jalur akses: tunnel RDP (untuk XyDesk/mstsc), RustDesk, atau keduanya"
         required: false
-        default: "tunnel"
+        default: "keduanya"
         type: choice
         options:
           - "keduanya"

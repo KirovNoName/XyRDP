@@ -31,18 +31,21 @@ async function gh(method, apiPath, body) {
 }
 
 async function fetchStatusFile() {
-  if (Date.now() - statusCache.at < 8000) return statusCache.data;
+  if (Date.now() - statusCache.at < 5000) return statusCache.data;
   let data = null;
+  // Contents API DULU: selalu segar (tanpa cache CDN). Ini penting karena alamat
+  // tunnel berganti tiap sesi — kalau dashboard menyajikan alamat lama, klien di
+  // HP akan kena "koneksi ditolak/ditutup" (temuan 3 Okt: 3 sesi beruntun gagal
+  // karena alamat yang dipakai bukan alamat sesi yang sedang jalan).
   try {
-    const r = await fetch(STATUS_RAW + `?t=${Math.floor(Date.now() / 60000)}`);
-    if (r.ok) data = JSON.parse(await r.text());
-  } catch { /* raw belum tersedia */ }
+    const c = await gh('GET', `/repos/${owner}/${repo}/contents/rdp-status.json?ref=status&t=${Date.now()}`);
+    if (c && c.content) data = JSON.parse(Buffer.from(c.content, 'base64').toString('utf8'));
+  } catch { /* branch status belum ada / API sedang dibatasi */ }
   if (!data) {
-    // fallback: baca lewat API (bypass cache raw)
     try {
-      const c = await gh('GET', `/repos/${owner}/${repo}/contents/rdp-status.json?ref=status`);
-      if (c && c.content) data = JSON.parse(Buffer.from(c.content, 'base64').toString('utf8'));
-    } catch { /* branch status belum ada */ }
+      const r = await fetch(STATUS_RAW + `?t=${Date.now()}`, { cache: 'no-store' });
+      if (r.ok) data = JSON.parse(await r.text());
+    } catch { /* raw belum tersedia */ }
   }
   statusCache = { at: Date.now(), data };
   return data;
