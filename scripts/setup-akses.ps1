@@ -332,73 +332,73 @@ function Start-Ngrok {
 #  padahal "selftest ok" dari dalam VM. Urutan otomatis sekarang:
 #  pinggy -> ngrok (kalau ada token) -> bore.
 # ---------------------------------------------------------------------------
-function Find-Ssh {
-  $cands = @()
+function Get-SshCandidates {
+  # Urutan penting: ssh bawaan Git (MSYS) berperilaku seperti ssh Linux dan
+  # mencetak keluaran server dengan benar. ssh.exe Windows OpenSSH di runner
+  # terbukti keluar TANPA keluaran apa pun (diagnostik run 37150390456).
+  $cands = @(
+    "$env:ProgramFiles\Git\usr\bin\ssh.exe",
+    "$env:ProgramFiles\Git\bin\ssh.exe",
+    'C:\Program Files\Git\usr\bin\ssh.exe',
+    "$env:ProgramFiles\OpenSSH\ssh.exe",
+    "$env:SystemRoot\System32\OpenSSH\ssh.exe"
+  )
   $c = Get-Command ssh -ErrorAction SilentlyContinue
   if ($c) { $cands += $c.Source }
-  $cands += @(
-    "$env:ProgramFiles\Git\usr\bin\ssh.exe",
-    "$env:ProgramFiles\OpenSSH\ssh.exe",
-    "$env:SystemRoot\System32\OpenSSH\ssh.exe",
-    'C:\Program Files\Git\usr\bin\ssh.exe',
-    'C:\Windows\System32\OpenSSH\ssh.exe'
-  )
-  foreach ($x in $cands) { if ($x -and (Test-Path $x)) { return $x } }
-  return $null
+  return @($cands | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique)
 }
 
 function Start-Pinggy {
   $logF = Join-Path $work 'pinggy.log'
   $errF = Join-Path $work 'pinggy.err'
-  $ssh = Find-Ssh
-  if (-not $ssh) { Log '  pinggy: ssh.exe tidak ditemukan - dilewati'; return $null }
-  Log "  pinggy: klien ssh = $ssh"
+  $sshList = Get-SshCandidates
+  if (-not $sshList -or $sshList.Count -eq 0) { Log '  pinggy: ssh.exe tidak ditemukan - dilewati'; return $null }
 
-  # diagnostik jaringan dulu: apakah server pinggy terjangkau dari VM ini?
+  # diagnostik jaringan: server pinggy terjangkau dari VM ini?
   foreach ($hp in @(@('a.pinggy.io', 443), @('a.pinggy.io', 22))) {
     try {
-      $t = Test-NetConnection -ComputerName $hp[0] -Port $hp[1] -InformationLevel Quiet -WarningAction SilentlyContinue
-      Log "  pinggy: TCP $($hp[0]):$($hp[1]) -> $(if ($t) { 'TERJANGKAU' } else { 'TIDAK terjangkau' })"
-    } catch {
-      try {
-        $tc = New-Object System.Net.Sockets.TcpClient
-        $ok = $tc.ConnectAsync($hp[0], $hp[1]).Wait(6000); $tc.Close()
-        Log "  pinggy: TCP $($hp[0]):$($hp[1]) -> $(if ($ok) { 'TERJANGKAU' } else { 'TIDAK terjangkau' })"
-      } catch { Log "  pinggy: uji TCP $($hp[0]):$($hp[1]) error: $($_.Exception.Message)" }
-    }
+      $ok = $false
+      $tc = New-Object System.Net.Sockets.TcpClient
+      $ok = $tc.ConnectAsync($hp[0], $hp[1]).Wait(7000); $tc.Close()
+      Log "  pinggy: TCP $($hp[0]):$($hp[1]) -> $(if ($ok) { 'TERJANGKAU' } else { 'TIDAK terjangkau' })"
+    } catch { Log "  pinggy: uji TCP $($hp[0]):$($hp[1]) error: $($_.Exception.Message)" }
   }
+  if (-not $env:HOME) { $env:HOME = $env:USERPROFILE }   # MSYS ssh butuh HOME
 
   $tgt = if ($script:RdpTarget -and $script:RdpTarget -ne '::1') { $script:RdpTarget } else { '127.0.0.1' }
-  foreach ($port in @(443, 22)) {
-    foreach ($attempt in 1..2) {
-      Remove-Item $logF, $errF -ErrorAction SilentlyContinue
-      Log "  pinggy: ssh -p $port (percobaan $attempt, target $tgt`:$localPort)"
-      # UserKnownHostsFile=NUL + LogLevel=ERROR: jangan sampai output kunci host
-      # menutupi baris 'tcp://...' yang kita tunggu
-      $sshArgs = @('-p', "$port", '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=NUL',
-                   '-o', 'LogLevel=ERROR', '-o', 'ServerAliveInterval=20', '-o', 'ConnectTimeout=15',
-                   '-o', 'ExitOnForwardFailure=yes', "-R0:$tgt`:$localPort", 'tcp@a.pinggy.io')
-      $p = Start-Process -FilePath $ssh -ArgumentList $sshArgs -RedirectStandardOutput $logF `
-            -RedirectStandardError $errF -PassThru -WindowStyle Hidden
-      $deadline = (Get-Date).AddSeconds(75)
-      while ((Get-Date) -lt $deadline) {
-        Start-Sleep -Seconds 2
-        $txt = (@(Get-Content $logF -Raw -ErrorAction SilentlyContinue) -join '') +
-               (@(Get-Content $errF -Raw -ErrorAction SilentlyContinue) -join '')
-        if ($txt -match 'tcp://([a-zA-Z0-9.-]+):(\d+)') {
-          $h = $Matches[1]; $pt = [int]$Matches[2]
-          Log "  TUNNEL : $h`:$pt (pinggy, tanpa akun)"
-          return @{ provider = 'pinggy'; host = $h; port = $pt; pid = $p.Id; log = $logF }
+  foreach ($ssh in $sshList) {
+    $isMsys = ($ssh -match 'Git')
+    $kh = if ($isMsys) { '/dev/null' } else { 'NUL' }
+    foreach ($port in @(443, 22)) {
+      foreach ($attempt in 1..2) {
+        Remove-Item $logF, $errF -ErrorAction SilentlyContinue
+        Log "  pinggy: klien=$([System.IO.Path]::GetFileName($ssh)) port=$port (coba $attempt, target $tgt`:$localPort)"
+        $sshArgs = @('-p', "$port", '-o', 'StrictHostKeyChecking=no', '-o', "UserKnownHostsFile=$kh",
+                     '-o', 'LogLevel=INFO', '-o', 'ServerAliveInterval=20', '-o', 'ConnectTimeout=15',
+                     '-o', 'ExitOnForwardFailure=yes', "-R0:$tgt`:$localPort", 'tcp@a.pinggy.io')
+        $p = Start-Process -FilePath $ssh -ArgumentList $sshArgs -RedirectStandardOutput $logF `
+              -RedirectStandardError $errF -PassThru -WindowStyle Hidden
+        $deadline = (Get-Date).AddSeconds(70)
+        while ((Get-Date) -lt $deadline) {
+          Start-Sleep -Seconds 2
+          $txt = (@(Get-Content $logF -Raw -ErrorAction SilentlyContinue) -join '') +
+                 (@(Get-Content $errF -Raw -ErrorAction SilentlyContinue) -join '')
+          if ($txt -match 'tcp://([a-zA-Z0-9.-]+):(\d+)') {
+            $h = $Matches[1]; $pt = [int]$Matches[2]
+            Log "  TUNNEL : $h`:$pt (pinggy, tanpa akun)"
+            return @{ provider = 'pinggy'; host = $h; port = $pt; pid = $p.Id; log = $logF }
+          }
+          if ($p.HasExited) { break }
         }
-        if ($p.HasExited) { break }
+        $out = (@(Get-Content $logF -Raw -ErrorAction SilentlyContinue) -join ' ').Trim()
+        $err = (@(Get-Content $errF -Raw -ErrorAction SilentlyContinue) -join ' ').Trim()
+        $code = 'masih jalan'; try { if ($p.HasExited) { $code = "exit=$($p.ExitCode)" } } catch {}
+        Log "  pinggy: gagal ($code). stdout: $(Log-Tail $out 1) | stderr: $(Log-Tail $err 1)"
+        try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
       }
-      $out = (@(Get-Content $logF -Raw -ErrorAction SilentlyContinue) -join ' ').Trim()
-      $err = (@(Get-Content $errF -Raw -ErrorAction SilentlyContinue) -join ' ').Trim()
-      Log "  pinggy: gagal (port $port). keluaran ssh: $(Log-Tail $out 1) | error: $(Log-Tail $err 1)"
-      try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
     }
   }
-  Log '  pinggy: tidak dapat endpoint dari port 443 maupun 22'
+  Log '  pinggy: semua klien/port gagal - tidak dapat endpoint'
   return $null
 }
 
