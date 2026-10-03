@@ -24,13 +24,79 @@ function Log-Tail([string]$text, [int]$lines = 2) {
 }
 
 # ---------- registry ----------
-# Set-Reg: bikin key + value, tahan error (return $true/$false)
+# Pelajaran dari validasi nyata (2026-10-03) di runner windows-2022:
+#   - 'New-ItemProperty -Force' di value yang SUDAH ADA bisa ditolak
+#     "Attempted to perform an unauthorized operation" (butuh hak Create/Delete
+#     yang tidak dimiliki Administrators pada sebagian kunci, mis.
+#     Terminal Server\fDenyTSConnections, Winlogon\DisableCAD,
+#     CurrentVersion\ProductName).
+#   - 'Set-ItemProperty' pada value yang sudah ada hanya butuh "Set Value"
+#     -> BERHASIL (itu sebabnya script lama jalan).
+# Set-Reg sekarang: exists? -> Set-ItemProperty; kalau perlu -> New-ItemProperty
+# -> reg.exe add /f -> ambil kepemilikan kunci lalu ulangi.
+
+function To-RegExePath([string]$Path) {
+  $p = $Path -replace '^Registry::', ''
+  $map = @{ 'HKEY_LOCAL_MACHINE' = 'HKLM'; 'HKEY_CURRENT_USER' = 'HKCU'; 'HKEY_USERS' = 'HKU'; 'HKEY_CLASSES_ROOT' = 'HKCR'; 'HKEY_CURRENT_CONFIG' = 'HKCC' }
+  foreach ($k in $map.Keys) { if ($p.StartsWith($k + '\')) { return ($map[$k] + $p.Substring($k.Length)) } }
+  return $null
+}
+
+function Grant-KeyAccess([string]$Path) {
+  # ambil kepemilikan + FullControl untuk user sekarang (dipakai hanya kalau
+  # penulisan ditolak; mis. CurrentVersion milik TrustedInstaller)
+  try {
+    $ident = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $sub = $Path -replace '^Registry::', ''
+    if ($sub.StartsWith('HKEY_LOCAL_MACHINE\')) {
+      $hive = [Microsoft.Win32.Registry]::LocalMachine; $sub = $sub.Substring('HKEY_LOCAL_MACHINE\'.Length)
+    } elseif ($sub.StartsWith('HKEY_CURRENT_USER\')) {
+      $hive = [Microsoft.Win32.Registry]::CurrentUser; $sub = $sub.Substring('HKEY_CURRENT_USER\'.Length)
+    } else { return $false }
+
+    $key = $hive.OpenSubKey($sub, [Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree, [System.Security.AccessControl.RegistryRights]::TakeOwnership)
+    if (-not $key) { return $false }
+    $acl = $key.GetAccessControl([System.Security.AccessControl.AccessControlSections]::None)
+    $acl.SetOwner($ident.User); $key.SetAccessControl($acl)
+    $acl = $key.GetAccessControl()
+    $acl.SetAccessRule((New-Object System.Security.AccessControl.RegistryAccessRule($ident.Name, 'FullControl', 'Allow')))
+    $key.SetAccessControl($acl); $key.Close()
+    Log "  reg: kepemilikan kunci diambil ($sub)"
+    return $true
+  } catch { Log "  reg: ambil kepemilikan gagal: $($_.Exception.Message)"; return $false }
+}
+
 function Set-Reg([string]$Path, [string]$Name, $Value, [string]$Type = 'String') {
+  # 1) value sudah ada -> Set-ItemProperty (hak paling minimal)
+  $exists = $false
+  try { $null = Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop; $exists = $true } catch {}
+  if ($exists) {
+    try { Set-ItemProperty -Path $Path -Name $Name -Value $Value -ErrorAction Stop; return $true }
+    catch { Log "  reg: Set-ItemProperty gagal ($Name): $($_.Exception.Message)" }
+  }
+  # 2) bikin/set lewat provider
   try {
     New-Item -Path $Path -Force -ErrorAction Stop | Out-Null
     New-ItemProperty -Path $Path -Name $Name -Value $Value -PropertyType $Type -Force -ErrorAction Stop | Out-Null
     return $true
-  } catch { Log "  reg gagal ($Path\$Name): $($_.Exception.Message)"; return $false }
+  } catch { Log "  reg: New-ItemProperty gagal ($Name): $($_.Exception.Message)" }
+  # 3) fallback reg.exe
+  $rk = To-RegExePath $Path
+  if ($rk) {
+    $t = switch ("$Type") { 'DWord' { 'REG_DWORD' } 'ExpandString' { 'REG_EXPAND_SZ' } 'MultiString' { 'REG_MULTI_SZ' } default { 'REG_SZ' } }
+    $out = & reg add $rk /v $Name /t $t /d $Value /f 2>&1
+    if ($LASTEXITCODE -eq 0) { return $true }
+    Log "  reg: reg.exe add gagal ($Name): $(Log-Tail "$out" 1)"
+  }
+  # 4) ambil kepemilikan kunci, lalu ulangi
+  if (Grant-KeyAccess $Path) {
+    try {
+      New-ItemProperty -Path $Path -Name $Name -Value $Value -PropertyType $Type -Force -ErrorAction Stop | Out-Null
+      return $true
+    } catch { Log "  reg: masih gagal setelah ambil kepemilikan ($Name): $($_.Exception.Message)" }
+  }
+  Log "  reg GAGAL total ($Path\$Name)"
+  return $false
 }
 
 function Get-Reg([string]$Path, [string]$Name) {

@@ -164,10 +164,11 @@ $badgeStatus = 'skip'
 if ($cfg.win10_badge) {
   try {
     $cv = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
-    Set-Reg $cv 'ProductName'     'Windows 10 Pro' 'String' | Out-Null
-    Set-Reg $cv 'EditionID'       'Professional'   'String' | Out-Null
-    Set-Reg $cv 'CompositionEditionID' 'Professional' 'String' | Out-Null
-    Set-Reg $cv 'DisplayVersion'  '22H2'           'String' | Out-Null
+    $b1 = Set-Reg $cv 'ProductName'     'Windows 10 Pro' 'String'
+    $b2 = Set-Reg $cv 'EditionID'       'Professional'   'String'
+    $b3 = Set-Reg $cv 'CompositionEditionID' 'Professional' 'String'
+    $b4 = Set-Reg $cv 'DisplayVersion'  '22H2'           'String'
+    $badgewins = @($b1, $b2, $b3, $b4 | Where-Object { $_ }).Count
     # ProductType: key ini milik TrustedInstaller -> ambil kepemilikan dulu
     $key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\ProductOptions', $true)
     if (-not $key) {
@@ -182,8 +183,8 @@ if ($cfg.win10_badge) {
     }
     $key.SetValue('ProductType', 'WinNT', [Microsoft.Win32.RegistryValueKind]::String)
     $key.Close()
-    Log '  label registry: Windows 10 Pro / 22H2 (ProductType=WinNT)'
-    $badgeStatus = 'ok'
+    Log "  label registry: Windows 10 Pro / 22H2 (ProductType=WinNT, $badgewins/4 kunci nama produk berhasil)"
+    $badgeStatus = if ($badgewins -ge 3) { 'ok' } else { "sebagian ($badgewins/4)" }
   } catch { Log "  label Windows 10 gagal (tidak kritis): $($_.Exception.Message)"; $badgeStatus = 'gagal' }
 } else {
   Log '  label Windows 10 dimatikan (win10_badge=false) — sistem tetap menampilkan nama Windows Server'

@@ -325,6 +325,7 @@
       $('cRdSrv').textContent=a&&a.rustdesk&&a.rustdesk.server?a.rustdesk.server:'server publik bawaan';
       var tun=a&&a.tunnel?a.tunnel.address:'';
       $('cTun').textContent=(tun?((a.tunnel.provider?a.tunnel.provider.toUpperCase()+' ':'')+tun):'-');
+      if(tun&&a.tunnel.selftest)$('cTun').textContent+=(' ['+(a.tunnel.selftest==='ok'?'self-test ok':'self-test '+a.tunnel.selftest)+']');
       cTunRaw=tun;
       t0=st?Date.parse(st):null; t1=en?Date.parse(en):null; tickLeft();
       var key=(rdId||'')+'|'+(tun||'');

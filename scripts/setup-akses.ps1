@@ -98,31 +98,50 @@ function Find-RustDesk {
   return $null
 }
 
+# tunggu sabar sampai binary RustDesk muncul (installer bisa asinkron)
+function Wait-RustDeskFiles([int]$maxSec = 300) {
+  $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt $maxSec) {
+    if (Find-RustDesk) { return $true }
+    Start-Sleep -Seconds 10
+  }
+  return [bool](Find-RustDesk)
+}
+
 function Install-RustDesk {
+  # Urutan: MSI (paling andal: msiexec menunggu sampai selesai) -> winget -> exe
+  $msi = Get-GhAssetUrl 'rustdesk/rustdesk' '^rustdesk-[0-9.]+-x86_64\.msi$'
+  if ($msi) {
+    $msiFile = Join-Path $work $msi.name
+    if (Get-File $msi.url $msiFile 300) {
+      Log "  install MSI: $($msi.name) ($($msi.tag))..."
+      $r = Invoke-Cmd 'msiexec.exe' @('/i', $msiFile, '/qn', '/norestart', '/l*v', (Join-Path $work 'msi.log')) 600
+      if ($r.timeout) { Log '  msiexec TIMEOUT 600s — lanjut verifikasi berkas' }
+      else { Log "  msiexec selesai (exit=$($r.code))" }
+      if (Wait-RustDeskFiles 120) { return $true }
+    } else { Log '  unduh MSI gagal' }
+  }
   $wg = Get-Command winget -ErrorAction SilentlyContinue
   if ($wg) {
     Log '  mencoba winget (RustDesk.RustDesk)...'
     $r = Invoke-Cmd 'winget' @('install','-e','--id','RustDesk.RustDesk','--source','winget',
                                 '--accept-source-agreements','--accept-package-agreements','--disable-interactivity') 300
-    if ($r.timeout) { Log '  winget TIMEOUT 300s — lanjut ke installer langsung' }
+    if ($r.timeout) { Log '  winget TIMEOUT 300s — lanjut ke installer exe' }
     else { Log ("  winget: " + (Log-Tail "$($r.out)$($r.err)" 1)) }
     Stop-RustDeskTray
-    if (Find-RustDesk) { return $true }
+    if (Wait-RustDeskFiles 60) { return $true }
   }
-  # fallback: unduh installer x86_64 dari GitHub releases
+  # fallback terakhir: installer exe (asinkron; tunggu sampai 5 menit)
   $asset = Get-GhAssetUrl 'rustdesk/rustdesk' '^rustdesk-[0-9.]+-x86_64\.exe$'
   if (-not $asset) { Log '  tidak menemukan installer RustDesk di GitHub releases'; return $false }
   $exe = Join-Path $work $asset.name
   if (-not (Get-File $asset.url $exe 300)) { Log '  unduh installer RustDesk gagal'; return $false }
-  Log "  install dari $($asset.name) ($($asset.tag))..."
-  # PENTING: jangan pakai -Wait (installer menyalakan proses anak -> -Wait bisa
-  # menggantung). Tunggu maksimal 420s, lalu lanjut apa pun yang terjadi.
+  Log "  install exe: $($asset.name) ($($asset.tag))..."
   $r = Invoke-Cmd $exe @('--silent-install') 420
-  if ($r.timeout) { Log '  installer TIMEOUT 420s (kemungkinan sudah terpasang) — verifikasi berkas...' }
-  else { Log "  installer selesai (exit=$($r.code))" }
+  if ($r.timeout) { Log '  installer exe TIMEOUT 420s — verifikasi berkas' }
+  else { Log "  installer exe selesai (exit=$($r.code))" }
   Stop-RustDeskTray
-  for ($i = 0; $i -lt 20 -and -not (Find-RustDesk); $i++) { Start-Sleep -Seconds 3 }
-  return [bool](Find-RustDesk)
+  return (Wait-RustDeskFiles 300)
 }
 
 $rdStatus = 'skip'; $rdId = ''; $rdServer = 'rs-ny.rustdesk.com / rs-sg.rustdesk.com (server publik RustDesk)'
@@ -249,8 +268,10 @@ function Start-Bore {
   if (-not (Test-Path $boreExe)) { Log '  bore.exe tidak ada'; return $null }
   $logF = Join-Path $work 'bore.log'
   Remove-Item $logF -ErrorAction SilentlyContinue
-  Log "  mulai: bore local $localPort --to bore.pub"
-  $p = Start-Process -FilePath $boreExe -ArgumentList @('local', "$localPort", '--to', 'bore.pub') `
+  Log "  mulai: bore local $localPort --to bore.pub (local-host 127.0.0.1)"
+  # --local-host 127.0.0.1: jangan biarkan 'localhost' jatuh ke ::1 (RDP Windows
+  # tidak selalu listen di IPv6 -> koneksi lewat tunnel akan di-reset)
+  $p = Start-Process -FilePath $boreExe -ArgumentList @('local', "$localPort", '--local-host', '127.0.0.1', '--to', 'bore.pub') `
         -RedirectStandardOutput $logF -RedirectStandardError (Join-Path $work 'bore.err') -PassThru -WindowStyle Hidden
   $m = Wait-Tunnel $logF 'listening at\s+([^\s:]+):(\d+)' 90
   if (-not $m) { try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}; Log '  bore: tidak dapat endpoint (timeout)'; return $null }
@@ -272,8 +293,8 @@ function Start-Ngrok {
   try { & $ngrokExe config add-authtoken $ngrokTok 2>&1 | Out-Null } catch { Log "  ngrok authtoken: $($_.Exception.Message)" }
   $logF = Join-Path $work 'ngrok.log'
   Remove-Item $logF -ErrorAction SilentlyContinue
-  Log "  mulai: ngrok tcp $localPort"
-  $p = Start-Process -FilePath $ngrokExe -ArgumentList @('tcp', "$localPort", '--log=stdout', '--log-format=json') `
+  Log "  mulai: ngrok tcp 127.0.0.1:$localPort"
+  $p = Start-Process -FilePath $ngrokExe -ArgumentList @('tcp', "127.0.0.1:$localPort", '--log=stdout', '--log-format=json') `
         -RedirectStandardOutput $logF -RedirectStandardError (Join-Path $work 'ngrok.err') -PassThru -WindowStyle Hidden
   $m = Wait-Tunnel $logF 'tcp://([^":\s]+):(\d+)' 90
   if (-not $m) { try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}; Log '  ngrok: tidak dapat endpoint (timeout / token salah)'; return $null }
@@ -281,7 +302,7 @@ function Start-Ngrok {
   return @{ provider = 'ngrok'; host = $m.Groups[1].Value; port = [int]$m.Groups[2].Value; pid = $p.Id; log = $logF }
 }
 
-$tunStatus = 'skip'; $tun = $null
+$tunStatus = 'skip'; $tun = $null; $localOk = $false; $stOk = 'skip'
 if ($useTunnel) {
   Log "TUNNEL TCP (RDP $localPort): menyiapkan..."
   if ($prov -eq 'ngrok') { $tun = Start-Ngrok }
@@ -295,6 +316,41 @@ if ($useTunnel) {
   if ($tun) {
     $tunStatus = 'ok'
     Log '  RDP lewat tunnel: buka Remote Desktop Connection ke alamat di atas'
+
+    # --- diagnostik: RDP di VM benar-benar mendengarkan? ---
+    try {
+      $ns = (netstat -ano | Select-String ':3389' | Select-Object -First 4) -join ' | '
+      Log "  netstat :3389 -> $ns"
+    } catch {}
+    $localOk = $false
+    try {
+      $tc = New-Object System.Net.Sockets.TcpClient
+      $localOk = $tc.ConnectAsync('127.0.0.1', $localPort).Wait(5000)
+      $tc.Close()
+    } catch {}
+    Log "  RDP lokal 127.0.0.1:$localPort -> $(if ($localOk) { 'TERBUKA' } else { 'TERTUTUP (RDP mungkin belum jalan!)' })"
+
+    # --- self-test end-to-end: tembak handshake X.224 lewat endpoint publik ---
+    $stOk = 'gagal'
+    try {
+      $cr = [byte[]](0x03,0x00,0x00,0x13, 0x0e,0xe0,0x00,0x00,0x00,0x00,0x00,
+                     0x01,0x00,0x08,0x00,0x03,0x00,0x00,0x00)
+      $c2 = New-Object System.Net.Sockets.TcpClient
+      if ($c2.ConnectAsync($tun.host, $tun.port).Wait(15000)) {
+        $ns2 = $c2.GetStream()
+        $ns2.Write($cr, 0, $cr.Length); $ns2.Flush()
+        $buf = New-Object byte[] 64
+        $c2.ReceiveTimeout = 15000
+        $n = $ns2.Read($buf, 0, $buf.Length)
+        $hex = (($buf[0..([Math]::Min($n,8)-1)] | ForEach-Object { $_.ToString('x2') }) -join ' ')
+        Log "  self-test tunnel: balasan $n byte [$hex]"
+        if ($n -ge 6 -and $buf[0] -eq 0x03 -and $buf[1] -eq 0x00 -and $buf[5] -in @(0xd0, 0xcf)) {
+          $stOk = 'ok'
+          Log "  SELF-TEST OK — $($tun.host):$($tun.port) benar-benar sampai ke port 3389 VM (X.224 Connection Confirm)"
+        } else { Log '  self-test: balasan bukan X.224 Connection Confirm (cek lagi)' }
+        $c2.Close()
+      } else { Log "  self-test: tidak bisa connect ke $($tun.host):$($tun.port)" }
+    } catch { Log "  self-test error: $($_.Exception.Message)" }
   } else {
     $tunStatus = 'gagal'
     Log '  GAGAL membuat tunnel. Sesi tetap jalan — pakai jalur RustDesk.'
@@ -314,12 +370,14 @@ $aksesObj = [ordered]@{
     client = 'Unduh app RustDesk (gratis) -> masukkan ID + password'
   }
   tunnel   = [ordered]@{
-    status   = $tunStatus
-    provider = if ($tun) { $tun.provider } else { '' }
-    host     = if ($tun) { $tun.host } else { '' }
-    port     = if ($tun) { $tun.port } else { 0 }
-    address  = if ($tun) { "$($tun.host):$($tun.port)" } else { '' }
-    note     = 'Remote Desktop Connection (mstsc) ke alamat ini; user ' + $u
+    status     = $tunStatus
+    provider   = if ($tun) { $tun.provider } else { '' }
+    host       = if ($tun) { $tun.host } else { '' }
+    port       = if ($tun) { $tun.port } else { 0 }
+    address    = if ($tun) { "$($tun.host):$($tun.port)" } else { '' }
+    rdp_local  = if ($tun) { if ($localOk) { 'terbuka' } else { 'tertutup' } } else { '' }
+    selftest   = if ($tun) { $stOk } else { '' }
+    note       = 'Isi Host+Port ini di XyDesk Remote (Koneksi RDP) atau mstsc; user ' + $u
   }
 }
 Update-Status @{ akses = $aksesObj } | Out-Null

@@ -40,13 +40,31 @@ reg add 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' /v Loca
 Log "user '$u' siap: Administrators + Remote Desktop Users, password tidak expire"
 
 # ---------- 2. RDP standar ----------
-Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
+# fDenyTSConnections: pakai Set-Reg (robust: Set-ItemProperty -> New-ItemProperty
+# -> reg.exe -> ambil kepemilikan) supaya tidak diam-diam gagal seperti pada
+# validasi 2026-10-03.
+$okDeny = Set-Reg 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server' 'fDenyTSConnections' 0 'DWord'
+Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0 -ErrorAction SilentlyContinue
 Enable-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue | Out-Null
 # pastikan layanan RDP jalan
 foreach ($svc in @('TermService')) {
   try { Set-Service -Name $svc -StartupType Automatic -ErrorAction SilentlyContinue; Start-Service -Name $svc -ErrorAction SilentlyContinue } catch {}
 }
-Log 'RDP aktif di port 3389 (NLA default Windows). Tidak ada port publik di VM ini — akses lewat RustDesk/tunnel.'
+# tunggu port benar-benar mendengarkan (maks 60 detik) + catat buktinya
+$listen = 'belum'
+for ($i = 1; $i -le 20; $i++) {
+  try {
+    $f = Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction Stop | Select-Object -First 1
+    if ($f) { $listen = "ya ($($f.LocalAddress):$($f.LocalPort), pid $($f.OwningProcess))"; break }
+  } catch {}
+  Start-Sleep -Seconds 3
+}
+try {
+  $ns = (netstat -ano | Select-String ':3389' | Select-Object -First 3) -join ' | '
+  Log "  netstat :3389 -> $ns"
+} catch {}
+Log "RDP di port 3389: denyTS=$okDeny | listener=$listen (NLA default Windows). Tidak ada port publik di VM ini — akses lewat RustDesk/tunnel."
+
 
 # ---------- 3. Status (tanpa password) ----------
 $now = Get-Date
@@ -58,6 +76,8 @@ $status = [ordered]@{
   os_style       = 'Windows 10 look'
   rdp_port       = 3389
   rdp_user       = $u
+  rdp_listen     = $listen
+  rdp_denyts     = $okDeny
   started_at     = $now.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
   expires_at     = $now.AddMinutes($dur).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
   duration_menit = $dur
