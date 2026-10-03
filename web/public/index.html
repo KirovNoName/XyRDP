@@ -170,9 +170,11 @@
       <div class="two">
         <div><label>Jalur akses</label>
           <select id="fAkses">
-            <option value="keduanya" selected>Keduanya (tunnel XyDesk + RustDesk) — paling aman</option>
-            <option value="tunnel">Tunnel RDP saja (XyDesk/mstsc) — tercepat</option>
-            <option value="rustdesk">RustDesk saja (cadangan)</option>
+            <option value="tailscale" selected>Tailscale (IP 100.x) — paling andal, dipakai XyDesk Remote</option>
+            <option value="keduanya">Tunnel (bore/pinggy/ngrok) + RustDesk</option>
+            <option value="semua">Semua: Tailscale + tunnel + RustDesk</option>
+            <option value="rustdesk">RustDesk saja</option>
+            <option value="tunnel">Tunnel RDP saja (bore/pinggy/ngrok)</option>
           </select></div>
         <div><label>Provider tunnel</label>
           <select id="fProv">

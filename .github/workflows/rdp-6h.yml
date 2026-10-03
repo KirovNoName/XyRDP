@@ -45,7 +45,7 @@ on:
       akses:
         description: "Jalur akses: tailscale (IP 100.x, paling andal), tunnel RDP, RustDesk, atau kombinasi"
         required: false
-        default: "keduanya"
+        default: "tailscale"
         type: choice
         options:
           - "keduanya"
