@@ -43,9 +43,9 @@ on:
         default: "xyrdp"
         type: string
       akses:
-        description: "Jalur akses: RustDesk (app), tunnel RDP (mstsc), atau keduanya"
+        description: "Jalur akses: tunnel RDP (untuk XyDesk/mstsc), RustDesk, atau keduanya"
         required: false
-        default: "keduanya"
+        default: "tunnel"
         type: choice
         options:
           - "keduanya"
@@ -138,6 +138,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Info lingkungan (OS + versi)
+        timeout-minutes: 5
         shell: pwsh
         run: |
           $os = Get-CimInstance Win32_OperatingSystem
@@ -145,30 +146,36 @@ jobs:
           Write-Host "[XyRDP] Catatan    : UI/kernel sama dengan Windows 10 21H2; tweak Win10 dijalankan terpisah"
 
       - name: Setup dasar (user admin + RDP 3389)
+        timeout-minutes: 15
         shell: pwsh
         run: ./scripts/setup-rdp.ps1
 
       - name: Tweak tampilan Windows 10 (Server Manager, personalisasi, wallpaper)
         if: ${{ inputs.win10 != 'tidak' }}
+        timeout-minutes: 15
         shell: pwsh
         run: ./scripts/setup-win10.ps1
 
       - name: Host setup XyDesk Remote (AVC444 + ClearType + audio/mic + UDP 4433)
         if: ${{ inputs.xydesk != 'tidak' }}
+        timeout-minutes: 10
         shell: pwsh
         run: ./scripts/setup-xydesk.ps1
 
       - name: Setup ekstra (Lightshot + wallpaper + taskbar translucent)
         if: ${{ inputs.ekstra != 'tidak' }}
+        timeout-minutes: 20
         shell: pwsh
         run: ./scripts/setup-extras.ps1
 
       - name: Setup akses (RustDesk + tunnel RDP) — tanpa Tailscale
+        timeout-minutes: 25
         shell: pwsh
         run: ./scripts/setup-akses.ps1
 
       - name: Publish status ke branch 'status'
         continue-on-error: true
+        timeout-minutes: 10
         shell: pwsh
         run: ./scripts/publish-status.ps1 -Active $true
 
@@ -179,6 +186,7 @@ jobs:
       - name: Finalize (matikan akses, bersihkan status, hapus run lama)
         if: always()
         continue-on-error: true
+        timeout-minutes: 15
         shell: pwsh
         run: |
           ./scripts/publish-status.ps1 -Active $false

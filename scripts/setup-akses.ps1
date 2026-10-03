@@ -41,6 +41,43 @@ $ngrokTok = if ($env:NGROK_AUTHTOKEN) { $env:NGROK_AUTHTOKEN } else { $env:NGROK
 Log "mode akses = $mode | provider tunnel = $prov | RustDesk=$useRd | Tunnel=$useTunnel"
 
 # ============================================================================
+#  helper: jalankan perintah eksternal dengan TIMEOUT KERAS
+#  (pelajaran dari validasi 2026-10-03: `Start-Process --silent-install -Wait`
+#   menggantung selamanya karena installer RustDesk menyalakan proses anak;
+#   -Wait menunggu seluruh process tree -> job bisa nyangkut berjam-jam)
+# ============================================================================
+function Invoke-Cmd([string]$FilePath, [string[]]$Arguments, [int]$TimeoutSec = 60) {
+  $tag = [guid]::NewGuid().ToString('N').Substring(0, 8)
+  $outF = Join-Path $work "cmd-$tag.out"
+  $errF = Join-Path $work "cmd-$tag.err"
+  $res = @{ ok = $false; timeout = $false; code = $null; out = ''; err = '' }
+  try {
+    $p = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru -NoNewWindow `
+         -RedirectStandardOutput $outF -RedirectStandardError $errF -ErrorAction Stop
+    try {
+      $p | Wait-Process -Timeout $TimeoutSec -ErrorAction Stop
+      $res.ok = $true
+      $res.code = $p.ExitCode
+    } catch {
+      $res.timeout = $true
+      try { $p | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+    }
+  } catch { $res.err = $_.Exception.Message }
+  if (Test-Path $outF) { $res.out = (Get-Content $outF -Raw -ErrorAction SilentlyContinue) }
+  if (Test-Path $errF) { $res.err = "$($res.err)`n$(Get-Content $errF -Raw -ErrorAction SilentlyContinue)" }
+  return $res
+}
+
+# matikan aplikasi tray RustDesk (kalau ada) supaya CLI & service bersih
+function Stop-RustDeskTray {
+  try {
+    $apps = Get-Process -Name 'rustdesk' -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -and $_.Path -like '*RustDesk*' -and $_.SessionId -ne 0 }
+    if ($apps) { $apps | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
+  } catch {}
+}
+
+# ============================================================================
 #  BAGIAN 1 — RUSTDESK
 # ============================================================================
 function Find-RustDesk {
@@ -64,12 +101,13 @@ function Find-RustDesk {
 function Install-RustDesk {
   $wg = Get-Command winget -ErrorAction SilentlyContinue
   if ($wg) {
-    try {
-      Log '  mencoba winget (RustDesk.RustDesk)...'
-      $o = & winget install -e --id RustDesk.RustDesk --accept-source-agreements --accept-package-agreements --disable-interactivity 2>&1 | Out-String
-      Log ("  winget: " + (Log-Tail $o 1))
-      if (Find-RustDesk) { return $true }
-    } catch { Log "  winget error: $($_.Exception.Message)" }
+    Log '  mencoba winget (RustDesk.RustDesk)...'
+    $r = Invoke-Cmd 'winget' @('install','-e','--id','RustDesk.RustDesk','--source','winget',
+                                '--accept-source-agreements','--accept-package-agreements','--disable-interactivity') 300
+    if ($r.timeout) { Log '  winget TIMEOUT 300s — lanjut ke installer langsung' }
+    else { Log ("  winget: " + (Log-Tail "$($r.out)$($r.err)" 1)) }
+    Stop-RustDeskTray
+    if (Find-RustDesk) { return $true }
   }
   # fallback: unduh installer x86_64 dari GitHub releases
   $asset = Get-GhAssetUrl 'rustdesk/rustdesk' '^rustdesk-[0-9.]+-x86_64\.exe$'
@@ -77,7 +115,12 @@ function Install-RustDesk {
   $exe = Join-Path $work $asset.name
   if (-not (Get-File $asset.url $exe 300)) { Log '  unduh installer RustDesk gagal'; return $false }
   Log "  install dari $($asset.name) ($($asset.tag))..."
-  Start-Process -FilePath $exe -ArgumentList '--silent-install' -Wait
+  # PENTING: jangan pakai -Wait (installer menyalakan proses anak -> -Wait bisa
+  # menggantung). Tunggu maksimal 420s, lalu lanjut apa pun yang terjadi.
+  $r = Invoke-Cmd $exe @('--silent-install') 420
+  if ($r.timeout) { Log '  installer TIMEOUT 420s (kemungkinan sudah terpasang) — verifikasi berkas...' }
+  else { Log "  installer selesai (exit=$($r.code))" }
+  Stop-RustDeskTray
   for ($i = 0; $i -lt 20 -and -not (Find-RustDesk); $i++) { Start-Sleep -Seconds 3 }
   return [bool](Find-RustDesk)
 }
@@ -93,21 +136,31 @@ if ($useRd) {
   } else {
     Log "  terpasang: $rdExe"
     # service (mode unattended: bisa konek walau belum ada user login)
+    $svcOk = $false
     try {
+      if (-not (Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue)) {
+        $r = Invoke-Cmd $rdExe @('--install-service') 90
+        if ($r.timeout) { Log '  --install-service TIMEOUT 90s' }
+      }
+      for ($i = 0; $i -lt 20; $i++) {
+        $svc = Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue
+        if ($svc) { break }
+        Start-Sleep -Seconds 3
+      }
       $svc = Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue
-      if (-not $svc) { & $rdExe --install-service 2>&1 | Out-Null; Start-Sleep -Seconds 5 }
-      Set-Service -Name 'RustDesk' -StartupType Automatic -ErrorAction SilentlyContinue
-      Start-Service -Name 'RustDesk' -ErrorAction SilentlyContinue
-      Log '  service RustDesk: aktif'
+      if ($svc) {
+        Set-Service -Name 'RustDesk' -StartupType Automatic -ErrorAction SilentlyContinue
+        Start-Service -Name 'RustDesk' -ErrorAction SilentlyContinue
+        $svcOk = $true
+        Log '  service RustDesk: aktif (mode unattended)'
+      } else { Log '  service RustDesk belum terdaftar (lanjut; password/ID tetap dicoba)' }
     } catch { Log "  service RustDesk (tidak kritis): $($_.Exception.Message)" }
 
     # password permanen = password RDP (biar user hanya perlu 1 password)
     $pwOk = $false
     for ($i = 1; $i -le 3 -and -not $pwOk; $i++) {
-      try {
-        & $rdExe --password $pw 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) { $pwOk = $true } else { Start-Sleep -Seconds 3 }
-      } catch { Start-Sleep -Seconds 3 }
+      $r = Invoke-Cmd $rdExe @('--password', $pw) 30
+      if (-not $r.timeout) { $pwOk = $true } else { Log "  --password TIMEOUT (coba $i/3)"; Start-Sleep -Seconds 3 }
     }
     Log "  password permanen di-set: $(if ($pwOk) { 'ok' } else { 'PERLU CEK MANUAL' })"
 
@@ -130,9 +183,14 @@ if ($useRd) {
     }
 
     # ambil ID (perlu beberapa detik setelah service register ke server)
-    for ($i = 1; $i -le 20 -and -not $rdId; $i++) {
-      try { $rdId = (& $rdExe --get-id 2>$null | Select-Object -First 1) } catch {}
-      if ($rdId) { $rdId = ("$rdId" -replace '\s', '').Trim() }   # bersihkan spasi (ID harus tanpa spasi)
+    for ($i = 1; $i -le 12 -and -not $rdId; $i++) {
+      $r = Invoke-Cmd $rdExe @('--get-id') 25
+      if ($r.out) {
+        foreach ($line in ($r.out -split "`r?`n")) {
+          $clean = ($line -replace '\s', '').Trim()
+          if ($clean -match '^[0-9]{6,12}$') { $rdId = $clean; break }
+        }
+      }
       if (-not $rdId) { Start-Sleep -Seconds 5 }
     }
     if ($rdId) {
@@ -249,8 +307,9 @@ if ($useTunnel) {
 $aksesObj = [ordered]@{
   mode     = $mode
   rustdesk = [ordered]@{
-    status = $rdStatus
-    id     = $rdId
+    status  = $rdStatus
+    service = $svcOk
+    id      = $rdId
     server = $rdServer
     client = 'Unduh app RustDesk (gratis) -> masukkan ID + password'
   }

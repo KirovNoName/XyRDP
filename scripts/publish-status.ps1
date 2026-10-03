@@ -27,12 +27,18 @@ if (-not $isActive) {
   $json | Add-Member -NotePropertyName stopped_at -NotePropertyValue (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') -Force
   $json.active = $false
   # sesi mati -> jangan tinggalkan endpoint koneksi di file publik (branch status)
+  # helper: set/tambah properti walau belum ada (mis. status awal dari
+  # setup-rdp.ps1 belum punya field id/host/port/address)
+  function Clear-Field($obj, [string]$name, $value) {
+    if ($null -eq $obj) { return }
+    $obj | Add-Member -NotePropertyName $name -NotePropertyValue $value -Force
+  }
   if ($json.PSObject.Properties['akses']) {
-    if ($json.akses.PSObject.Properties['rustdesk']) { $json.akses.rustdesk.id = '' }
+    if ($json.akses.PSObject.Properties['rustdesk']) { Clear-Field $json.akses.rustdesk 'id' '' }
     if ($json.akses.PSObject.Properties['tunnel']) {
-      $json.akses.tunnel.host    = ''
-      $json.akses.tunnel.port    = 0
-      $json.akses.tunnel.address = ''
+      Clear-Field $json.akses.tunnel 'host'    ''
+      Clear-Field $json.akses.tunnel 'port'    0
+      Clear-Field $json.akses.tunnel 'address' ''
     }
   }
   # sisa field lama (versi Tailscale/XyDesk) kalau masih ada di file

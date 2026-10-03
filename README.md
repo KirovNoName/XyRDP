@@ -177,7 +177,7 @@ Input workflow (`Run workflow`):
 |---|---|
 | `durasi_menit` | 15 … 360 (batas keras job GitHub) |
 | `hostname` | nama sesi (dapat suffix nomor run, mis. `xyrdp-42`) |
-| `akses` | `keduanya` (default) · `rustdesk` · `tunnel` |
+| `akses` | `tunnel` (default — jalur XyDesk/mstsc) · `keduanya` · `rustdesk` |
 | `tunnel_provider` | `otomatis` · `bore` · `ngrok` |
 | `win10` | `ya` (default) / `tidak` — tweak tampilan Windows 10 |
 | `xydesk` | `ya` (default) / `tidak` — host setup XyDesk (AVC444 + ClearType + audio + UDP 4433) |
@@ -276,7 +276,8 @@ tunnel dikosongkan** dari file publik (tidak ada endpoint nyangkut di branch
 | `ERROR: secret RDP_PASSWORD …` | Secret belum diset / kurang dari 8 karakter |
 | RustDesk ID kosong di dashboard | Service RustDesk belum register ke server publik. Cek log step **Setup akses**; coba sesi berikutnya, atau isi `rd_server` |
 | Tidak bisa konek RustDesk | Pastikan klienmu memakai server yang sama (default = publik). Kalau kamu set `RD_SERVER`, klienmu juga harus diarahkan ke server itu |
-| Tunnel tidak muncul | bore.pub sedang sibuk, atau token ngrok salah/kosong. Coba provider lain (`otomatis` mencoba ngrok lalu bore) |
+| Tunnel tidak muncul | bore.pub sedang sibuk, atau token ngrok salah/kosong. Provider `otomatis` mencoba ngrok lalu bore. Kalau `ngrok` dipilih tapi token kosong, jalur ini dilewati |
+| Step "Setup akses" lama sekali | Sudah dikasih timeout keras (installer RustDesk 420s, winget 300s, ambil ID 12×25s, tunnel 90s) + `timeout-minutes` per step. Kalau RustDesk gagal, script lanjut ke tunnel — sesi tidak pernah nyangkut |
 | `mstsc` menolak konek | Pakai alamat **persis** `host:port` dari dashboard; tunnel hidup hanya selama sesi |
 | Taskbar tidak translucent | Efek native tetap aktif; TranslucentTB portable butuh Windows 10/11 — kalau gagal, ganti mode via tray icon |
 | Label "Windows 10 Pro" | Kosmetik (registry). `winver`/About bisa tetap menampilkan nama Server — branding Windows di folder `branding` milik TrustedInstaller, tidak diubah |
