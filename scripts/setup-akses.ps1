@@ -373,11 +373,17 @@ function Start-Pinggy {
       foreach ($attempt in 1..2) {
         Remove-Item $logF, $errF -ErrorAction SilentlyContinue
         Log "  pinggy: klien=$([System.IO.Path]::GetFileName($ssh)) port=$port (coba $attempt, target $tgt`:$localPort)"
-        $sshArgs = @('-p', "$port", '-o', 'StrictHostKeyChecking=no', '-o', "UserKnownHostsFile=$kh",
+        # WAJIB: beri stdin yang valid (file kosong = EOF). Kalau stdin tidak valid,
+        # ssh tidak meminta channel sesi dan server pinggy TIDAK mengirim banner
+        # yang memuat tcp://... -> tunnel terbentuk tapi alamatnya tidak pernah
+        # kita ketahui (persis kejadian di run 37150390456 & 37151286900).
+        $inF = Join-Path $work 'pinggy.in'
+        if (-not (Test-Path $inF)) { New-Item -ItemType File -Path $inF -Force | Out-Null }
+        $sshArgs = @('-p', "$port", '-T', '-o', 'StrictHostKeyChecking=no', '-o', "UserKnownHostsFile=$kh",
                      '-o', 'LogLevel=INFO', '-o', 'ServerAliveInterval=20', '-o', 'ConnectTimeout=15',
                      '-o', 'ExitOnForwardFailure=yes', "-R0:$tgt`:$localPort", 'tcp@a.pinggy.io')
         $p = Start-Process -FilePath $ssh -ArgumentList $sshArgs -RedirectStandardOutput $logF `
-              -RedirectStandardError $errF -PassThru -WindowStyle Hidden
+              -RedirectStandardError $errF -RedirectStandardInput $inF -PassThru -WindowStyle Hidden
         $deadline = (Get-Date).AddSeconds(70)
         while ((Get-Date) -lt $deadline) {
           Start-Sleep -Seconds 2
@@ -390,10 +396,12 @@ function Start-Pinggy {
           }
           if ($p.HasExited) { break }
         }
-        $out = (@(Get-Content $logF -Raw -ErrorAction SilentlyContinue) -join ' ').Trim()
-        $err = (@(Get-Content $errF -Raw -ErrorAction SilentlyContinue) -join ' ').Trim()
+        $out = ((@(Get-Content $logF -Raw -ErrorAction SilentlyContinue) -join ' ') -replace '\s+', ' ').Trim()
+        $err = ((@(Get-Content $errF -Raw -ErrorAction SilentlyContinue) -join ' ') -replace '\s+', ' ').Trim()
         $code = 'masih jalan'; try { if ($p.HasExited) { $code = "exit=$($p.ExitCode)" } } catch {}
-        Log "  pinggy: gagal ($code). stdout: $(Log-Tail $out 1) | stderr: $(Log-Tail $err 1)"
+        Log "  pinggy: gagal ($code)."
+        Log "    stdout($($out.Length) char): $($out.Substring(0, [Math]::Min(300, $out.Length)))"
+        Log "    stderr($($err.Length) char): $($err.Substring(0, [Math]::Min(300, $err.Length)))"
         try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
       }
     }
