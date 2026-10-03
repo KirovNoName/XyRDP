@@ -129,6 +129,8 @@
       <div class="row"><span class="k">Host &amp; Port (XyDesk / mstsc)</span>
         <span class="v"><span id="cTun">-</span> <button class="mini" data-copy="cTunHost">SALIN HOST</button>
         <button class="mini" data-copy="cTunPort">SALIN PORT</button></span></div>
+      <div class="row"><span class="k">Kesiapan RDP di VM</span><span class="v" id="cRdp">-</span></div>
+      <div class="row"><span class="k">Server RustDesk</span><span class="v" id="cRdSrv">-</span></div>
       <div class="row"><span class="k">Pengguna</span>
         <span class="v"><span id="cUser">-</span> <button class="mini" data-copy="cUser">SALIN</button></span></div>
       <div class="row"><span class="k">Hak akses</span><span class="v">Administrator <small>(Administrators + Remote Desktop Users, token admin penuh)</small></span></div>
@@ -145,6 +147,7 @@
         (sertifikat VM sekali-pakai). <b>RustDesk</b> cuma jalur cadangan kalau tunnel mati.
         Catatan: audio bridge QUIC XyDesk (UDP 4433) tidak lewat tunnel TCP — klien otomatis
         fallback ke audio RDP.</div>
+      <div class="hint" id="cTunNote"></div>
     </div>
 
     <div class="panel">
@@ -247,6 +250,10 @@
 <script>
 (function(){
   var $=function(id){return document.getElementById(id)},
+      // tulis teks dengan aman: elemen yang tidak ada di HTML tidak bikin
+      // seluruh render berhenti (bug lama: $('cRdSrv') tidak ada -> TypeError
+      // membuat baris tunnel & sisa render tidak pernah jalan)
+      setTxt=function(id,txt){var el=$(id);if(el)el.textContent=txt;if(el)el.title=txt||'';},
       cfg={}, authed=false, lastRun=null, passShown=false, stopArmed=0, t0=null, t1=null, wpData=null, cTunRaw='';
 
   function flash(msg){var f=$('flash');f.textContent=msg;f.classList.add('show');
@@ -311,21 +318,25 @@
       else if(r&&r.conclusion==='cancelled'){txt='DIHENTIKAN';cls='err'}
       setPill(txt,cls);
       var d=$('hdot');d.className='dot '+(cls==='ok'?'on':cls==='mid'?'mid':cls==='err'?'err':'');
-      if(r){$('stRun').textContent='#'+r.id;$('stRun').href=r.html_url||'#'}
+      if(r){setTxt('stRun','#'+r.id);$('stRun').href=r.html_url||'#'}
       var st=g?g.started_at:null, en=g?g.expires_at:null;
-      $('stOs').textContent=g&&g.os?(g.os.replace(/^Microsoft /,'')+(g.os_style?(' · '+g.os_style):'')):'-';
+      setTxt('stOs',(g&&g.os)?(g.os.replace(/^Microsoft /,'')+(g.os_style?(' · '+g.os_style):'')):'-');
       $('stStart').textContent=fmt(st); $('stEnd').textContent=fmt(en);
-      $('stExtras').textContent=extrasText(g);
+      setTxt('stExtras',extrasText(g));
       // --- akses: RustDesk + tunnel ---
       var a=g&&g.akses?g.akses:null;
       var modeTxt={keduanya:'Tunnel (XyDesk/mstsc) + RustDesk',rustdesk:'RustDesk saja',tunnel:'Tunnel RDP saja'};
-      $('cMode').textContent=a?(modeTxt[a.mode]||a.mode):'-';
+      setTxt('cMode',a?(modeTxt[a.mode]||a.mode):'-');
       var rdId=a&&a.rustdesk?a.rustdesk.id:'';
-      $('cRdId').textContent=(rdId?rdId:'-');
-      $('cRdSrv').textContent=a&&a.rustdesk&&a.rustdesk.server?a.rustdesk.server:'server publik bawaan';
+      setTxt('cRdId',(rdId?rdId:'-'));
+      setTxt('cRdSrv',a&&a.rustdesk&&a.rustdesk.server?a.rustdesk.server:'server publik bawaan');
       var tun=a&&a.tunnel?a.tunnel.address:'';
-      $('cTun').textContent=(tun?((a.tunnel.provider?a.tunnel.provider.toUpperCase()+' ':'')+tun):'-');
-      if(tun&&a.tunnel.selftest)$('cTun').textContent+=(' ['+(a.tunnel.selftest==='ok'?'self-test ok':'self-test '+a.tunnel.selftest)+']');
+      var tunTxt=(tun?((a.tunnel.provider?a.tunnel.provider.toUpperCase()+' ':'')+tun):'-');
+      if(tun&&a.tunnel.selftest)tunTxt+=(' ['+(a.tunnel.selftest==='ok'?'self-test ok':'self-test '+a.tunnel.selftest)+']');
+      setTxt('cTun',tunTxt);
+      var xd=g&&g.xydesk?g.xydesk:null;
+      setTxt('cRdp',(xd&&xd.rdp_ready)?xd.rdp_ready:(g&&g.rdp_listen?String(g.rdp_listen):'-'));
+      setTxt('cTunNote',(a&&a.tunnel&&a.tunnel.selftest!=='ok'&&a.tunnel.note2)?('Catatan tunnel: '+a.tunnel.note2):'');
       cTunRaw=tun;
       t0=st?Date.parse(st):null; t1=en?Date.parse(en):null; tickLeft();
       var key=(rdId||'')+'|'+(tun||'');

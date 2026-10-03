@@ -229,13 +229,23 @@ tidak ada yang bisa di-apply live).
   "os": "Microsoft Windows Server 2022 Datacenter", "os_build": "10.0.20348",
   "os_style": "Windows 10 look",
   "rdp_user": "xyadmin", "rdp_port": 3389,
+  "rdp_listen": ":::3389 (svchost) | 0.0.0.0:3389 (svchost) + handshake ok via 127.0.0.1",
+  "rdp_denyts": true,
   "started_at": "…", "expires_at": "…",
   "akses": {
     "mode": "keduanya",
     "rustdesk": { "status": "ok", "id": "1234567890", "server": "server publik bawaan" },
     "tunnel":   { "status": "ok", "provider": "bore", "host": "bore.pub", "port": 47321,
-                  "address": "bore.pub:47321" }
+                  "address": "bore.pub:47321",
+                  "rdp_local": "127.0.0.1 -> terbuka",
+                  "selftest": "ok",            // handshake RDP X.224 lewat endpoint publik
+                  "note2": "Tunnel sudah diuji end-to-end (…)" }
   },
+  "xydesk": { "host": "ok", "denyts": "ok", "multisession": "ok", "avc444": "ok",
+              "fontsmoothing": "ok (ClearType profil Default)",
+              "audio_out": "ok (fDisableAudio=)", "audio_mic": "ok (fDisableAudioCapture=0)",
+              "rdp_ready": "127.0.0.1 (handshake OK)",
+              "rdp_probe": "awal=True multi=True audio=True grafis=True clear=True fw=True svc=True" },
   "win10": { "look": "ok", "badge": "ok", "wallpaper": "ok", "search": "ok" },
   "extras": { "lightshot": "ok", "translucent": "ok", "wallpaper": "ok",
               "wallpaper_file": "wallpaper-win10.jpg", "admin": true }
@@ -287,3 +297,48 @@ tunnel dikosongkan** dari file publik (tidak ada endpoint nyangkut di branch
 | XyDesk: tidak ada suara dari PC | Lewat tunnel TCP, audio lewat kanal RDP biasa — pastikan `Audiosrv` jalan (dicek di setup-xydesk) dan audio tidak di-mute di klien. QUIC UDP 4433 hanya untuk LAN/jalur UDP |
 | XyDesk: "Direct QUIC" tidak aktif | Wajar di jalur tunnel (UDP 4433 tidak lewat relay TCP) — sesi tetap jalan lewat RDP; QUIC hanya untuk Koneksi PC (ID) yang masih Experimental |
 | XyDesk: sertifikat RDP ditanya | Terima saja — VM sekali-pakai, sertifikatnya dibuat ulang tiap sesi |
+| Tunnel "hidup" tapi klien tidak bisa masuk (`selftest: gagal`) | Cek `akses.tunnel.note2` + `rdp_local` di dashboard. Script sudah menunggu RDP benar-benar menjawab handshake X.224 sebelum mengarahkan tunnel, dan mencoba ulang sekali dengan target terbaru. Kalau tetap gagal, pakai jalur RustDesk untuk sesi itu |
+| `rdp_probe` ada yang `False` | Salah satu tweak XyDesk merusak listener 3389. Nilai yang benar semuanya `True`; kalau ada `False`, kirim log step "Host setup XyDesk" — probe per fase menunjuk fase persisnya |
+| Kenapa `audio_out` cuma `ok (fDisableAudio=)` | Artinya nilai itu **tidak ada** di image (= default Windows: audio aktif). XyRDP sengaja **tidak menulis** kunci `WinStations\RDP-Tcp` (lihat §10) |
+
+---
+
+## 10. Kenapa XyRDP tidak menyentuh `WinStations\RDP-Tcp` (temuan uji 3 Okt 2026)
+
+Uji berulang di runner GitHub-hosted `windows-2022` menunjukkan hal yang tidak
+kelihatan dari dokumentasi: **menulis nilai di**
+
+```
+HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp
+```
+
+(`fDisableAudio`, `fDisableAudioCapture`, `fNoFontSmoothing`, `AllowFontAntiAlias`
+— persis yang dipakai skrip host XyDesk umum) memaksa TermService **membangun ulang
+listener RDP**, dan di runner GitHub listener itu **tidak kembali sehat** — port
+3389 berhenti melayani, handshake X.224 tidak pernah dibalas, dan restart
+`TermService` **tidak menolong**. Akibatnya tunnel "hidup" tapi tidak tembus.
+
+Karena itu di v2:
+
+- kunci itu **hanya dibaca** (audit) dan nilainya dilaporkan apa adanya di status;
+- **ClearType** dipasang lewat **profil Default** (`FontSmoothing=2`,
+  `FontSmoothingType=2` di `HKCU\Control Panel\Desktop`) — efek teks tajam untuk
+  klien XyDesk tanpa menyentuh kunci WinStation;
+- **audio capture** lewat kunci **kebijakan** (`fDisableAudioCapture=0`);
+- setiap fase tweak diakhiri **probe handshake X.224** (`rdp_probe`), jadi kalau
+  ada regresi langsung kelihatan fase mana penyebabnya.
+
+### Bukti uji (run nyata, 3 Okt 2026)
+
+```
+rdp_listen : :::3389 (svchost) | 0.0.0.0:3389 (svchost) + handshake ok via 127.0.0.1
+rdp_probe  : awal=True multi=True audio=True grafis=True clear=True fw=True svc=True
+rdp_ready  : 127.0.0.1 (handshake OK)
+tunnel     : bore.pub:35570  selftest=ok  (X.224 Connection Confirm lewat endpoint publik)
+rustdesk   : id 226636470, service jalan
+```
+
+Self-test tunnel dilakukan **dari dalam VM ke endpoint publik lalu kembali ke
+port 3389** — itu jalur yang sama dengan klienmu di HP. (Kalau kamu ingin
+memastikan sendiri: buka XyDesk Remote → **Koneksi RDP Penuh** → Host/Port dari
+dashboard → login `xyadmin`.)
