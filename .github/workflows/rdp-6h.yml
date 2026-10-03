@@ -58,6 +58,7 @@ on:
         type: choice
         options:
           - "otomatis"
+          - "pinggy"
           - "bore"
           - "ngrok"
       win10:

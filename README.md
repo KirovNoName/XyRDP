@@ -299,6 +299,8 @@ tunnel dikosongkan** dari file publik (tidak ada endpoint nyangkut di branch
 | XyDesk: sertifikat RDP ditanya | Terima saja — VM sekali-pakai, sertifikatnya dibuat ulang tiap sesi |
 | **HP: "koneksi ditolak / ditutup" padahal VM jalan** | 99% karena **alamat tunnel milik sesi lain**: port berganti setiap sesi baru. Pastikan sesi berstatus **AKTIF** dan alamat dibaca **dari dashboard/status sesi yang sedang jalan** (baris peringatan di dashboard berbunyi "✅ Alamat ini segar dari sesi …"). Sesudah menekan **Stop**, alamat lama **tidak berlaku lagi** |
 | Dashboard menampilkan alamat lama | Sudah diperbaiki: status dibaca via Contents API (selalu segar), bukan CDN raw yang bisa tertinggal ±5 menit |
+| **Tunnel "selftest ok" tapi HP tetap "connection refused"** | Temuan 3 Okt 2026: bore.pub **menerima** koneksi dari dalam VM tetapi **menolak** dari internet (6/8 node luar gagal; diuji dengan `tools/cek-tunnel.py`). Karena itu sekarang ada **verifikasi dari luar** (`akses.tunnel.outside`) dan bila gagal, XyRDP otomatis pindah provider. Urutan otomatis: **ngrok (kalau ada token) → pinggy → bore** |
+| Address pinggy berubah tiap ~60 menit | Wajar: tier gratis pinggy berbatas 60 menit. Keepalive memperpanjang otomatis tiap ~50 menit dan **alamatnya berganti** (dashboard selalu menampilkan yang terbaru). Untuk 6 jam tanpa ganti alamat: set secret **`NGROK_AUTHTOKEN`** (akun gratis ngrok) dan pakai `tunnel_provider=ngrok` |
 | Tunnel "hidup" tapi klien tidak bisa masuk (`selftest: gagal`) | Cek `akses.tunnel.note2` + `rdp_local` di dashboard. Script sudah menunggu RDP benar-benar menjawab handshake X.224 sebelum mengarahkan tunnel, dan mencoba ulang sekali dengan target terbaru. Kalau tetap gagal, pakai jalur RustDesk untuk sesi itu |
 | `rdp_probe` ada yang `False` | Salah satu tweak XyDesk merusak listener 3389. Nilai yang benar semuanya `True`; kalau ada `False`, kirim log step "Host setup XyDesk" — probe per fase menunjuk fase persisnya |
 | Kenapa `audio_out` cuma `ok (fDisableAudio=)` | Artinya nilai itu **tidak ada** di image (= default Windows: audio aktif). XyRDP sengaja **tidak menulis** kunci `WinStations\RDP-Tcp` (lihat §10) |
@@ -329,6 +331,22 @@ Karena itu di v2:
 - **audio capture** lewat kunci **kebijakan** (`fDisableAudioCapture=0`);
 - setiap fase tweak diakhiri **probe handshake X.224** (`rdp_probe`), jadi kalau
   ada regresi langsung kelihatan fase mana penyebabnya.
+
+### Uji dari LUAR, bukan cuma dari VM (pelajaran 3 Okt 2026)
+
+Ternyata "selftest ok" **tidak cukup**: pada sesi #49, `bore.pub:51782` menjawab
+handshake RDP X.224 dari dalam VM, tetapi dari internet port itu **ditolak**:
+
+```
+cek-tunnel.py bore.pub:51782  ->  0-1/8 node luar tersambung (connection refused)
+cek-tunnel.py portquiz.net:51782 (kontrol)      ->  8/8 tersambung
+cek-tunnel.py pinggy (tunnel uji)               ->  8/8 tersambung (termasuk Asia)
+```
+
+Karena itu v2 sekarang: (1) menguji alamat tunnel dari node luar sebelum
+mengumumkannya (`akses.tunnel.outside`), (2) memindahkan provider otomatis bila
+tidak terbukti, dan (3) memakai **pinggy** sebagai jalur pertama (tanpa akun,
+terbukti 8/8 dari node luar).
 
 ### Bukti uji (run nyata, 3 Okt 2026)
 

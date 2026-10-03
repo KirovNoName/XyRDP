@@ -328,13 +328,15 @@
       // --- akses: RustDesk + tunnel ---
       var a=g&&g.akses?g.akses:null;
       var modeTxt={keduanya:'Tunnel (XyDesk/mstsc) + RustDesk',rustdesk:'RustDesk saja',tunnel:'Tunnel RDP saja'};
-      setTxt('cMode',a?(modeTxt[a.mode]||a.mode):'-');
+      var provTxt=a&&a.tunnel&&a.tunnel.provider?(' ['+a.tunnel.provider.toUpperCase()+(a.tunnel.provider==='pinggy'?' - berlaku 60 mnt, diperpanjang otomatis':'')+']'):'';
+      setTxt('cMode',(a?(modeTxt[a.mode]||a.mode):'-')+provTxt);
       var rdId=a&&a.rustdesk?a.rustdesk.id:'';
       setTxt('cRdId',(rdId?rdId:'-'));
       setTxt('cRdSrv',a&&a.rustdesk&&a.rustdesk.server?a.rustdesk.server:'server publik bawaan');
       var tun=a&&a.tunnel?a.tunnel.address:'';
       var tunTxt=(tun?((a.tunnel.provider?a.tunnel.provider.toUpperCase()+' ':'')+tun):'-');
       if(tun&&a.tunnel.selftest)tunTxt+=(' ['+(a.tunnel.selftest==='ok'?'self-test ok':'self-test '+a.tunnel.selftest)+']');
+      if(tun&&a.tunnel.outside)tunTxt+=(' [luar '+(a.tunnel.outside.indexOf('ok (')===0?('ok '+a.tunnel.outside.slice(3)):a.tunnel.outside)+']');
       setTxt('cTun',tunTxt);
       var xd=g&&g.xydesk?g.xydesk:null;
       setTxt('cRdp',(xd&&xd.rdp_ready)?xd.rdp_ready:(g&&g.rdp_listen?String(g.rdp_listen):'-'));

@@ -35,7 +35,7 @@ $useRd     = ($mode -eq 'keduanya' -or $mode -eq 'rustdesk' -or $mode -eq 'rd')
 $useTunnel = ($mode -eq 'keduanya' -or $mode -eq 'tunnel' -or $mode -eq 'rdp')
 
 $prov = if ($env:TUNNEL_PROVIDER) { $env:TUNNEL_PROVIDER.Trim().ToLower() } else { 'otomatis' }
-if (@('otomatis', 'auto', 'bore', 'ngrok') -notcontains $prov) { $prov = 'otomatis' }
+if (@('otomatis', 'auto', 'bore', 'ngrok', 'pinggy', 'ssh') -notcontains $prov) { $prov = 'otomatis' }
 $ngrokTok = if ($env:NGROK_AUTHTOKEN) { $env:NGROK_AUTHTOKEN } else { $env:NGROK_TOKEN }
 
 Log "mode akses = $mode | provider tunnel = $prov | RustDesk=$useRd | Tunnel=$useTunnel"
@@ -325,7 +325,43 @@ function Start-Ngrok {
   return @{ provider = 'ngrok'; host = $m.Groups[1].Value; port = [int]$m.Groups[2].Value; pid = $p.Id; log = $logF }
 }
 
-$tunStatus = 'skip'; $tun = $null; $localOk = $false; $stOk = 'skip'
+# ---------------------------------------------------------------------------
+#  Pinggy: tunnel TCP lewat SSH (port 443) — TANPA akun, tanpa daftar.
+#  Terverifikasi 3 Okt 2026 dari node luar (8/8 tersambung, termasuk Vietnam),
+#  sementara bore.pub pada sesi yang sama DITOLAK dari luar (6/8 node gagal)
+#  padahal "selftest ok" dari dalam VM. Urutan otomatis sekarang:
+#  pinggy -> ngrok (kalau ada token) -> bore.
+# ---------------------------------------------------------------------------
+function Start-Pinggy {
+  $ssh = (Get-Command ssh -ErrorAction SilentlyContinue).Source
+  if (-not $ssh) { Log '  pinggy: ssh.exe tidak ada di runner ini - dilewati'; return $null }
+  $logF = Join-Path $work 'pinggy.log'
+  Remove-Item $logF -ErrorAction SilentlyContinue
+  $tgt = if ($script:RdpTarget -and $script:RdpTarget -ne '::1') { $script:RdpTarget } else { '127.0.0.1' }
+  Log "  pinggy: buka tunnel lewat ssh -p 443 (target $tgt`:$localPort)"
+  $sshArgs = @('-p', '443', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=NUL',
+               '-o', 'ServerAliveInterval=20', '-o', 'ExitOnForwardFailure=yes',
+               "-R0:$tgt`:$localPort", 'tcp@a.pinggy.io')
+  $p = Start-Process -FilePath $ssh -ArgumentList $sshArgs -RedirectStandardOutput $logF `
+        -RedirectStandardError (Join-Path $work 'pinggy.err') -PassThru -WindowStyle Hidden
+  $deadline = (Get-Date).AddSeconds(90)
+  while ((Get-Date) -lt $deadline) {
+    Start-Sleep -Seconds 2
+    $txt = (@(Get-Content $logF -Raw -ErrorAction SilentlyContinue) -join '') +
+           (@(Get-Content (Join-Path $work 'pinggy.err') -Raw -ErrorAction SilentlyContinue) -join '')
+    if ($txt -match 'tcp://([a-zA-Z0-9.-]+):(\d+)') {
+      $h = $Matches[1]; $pt = [int]$Matches[2]
+      Log "  TUNNEL : $h`:$pt (pinggy, tanpa akun)"
+      return @{ provider = 'pinggy'; host = $h; port = $pt; pid = $p.Id; log = $logF }
+    }
+    if ($p.HasExited) { break }
+  }
+  try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
+  Log '  pinggy: tidak dapat endpoint (timeout)'
+  return $null
+}
+
+$tunStatus = 'skip'; $tun = $null; $localOk = $false; $stOk = 'skip'; $reachOk = 'skip'; $reachTxt = ''
 if ($useTunnel) {
   Log "TUNNEL TCP (RDP $localPort): menyiapkan..."
   # --- pilih target lokal RDP (IPv4 dulu, lalu IPv6) + catat semua listener ---
@@ -364,19 +400,28 @@ if ($useTunnel) {
 
   # --- buat tunnel; kalau tidak tembus, cek ulang RDP lalu ulangi sekali lagi ---
   for ($att = 1; $att -le 2; $att++) {
-    if ($prov -eq 'ngrok') { $tun = Start-Ngrok }
+    if ($prov -in @('pinggy', 'ssh')) { $tun = Start-Pinggy }
+    elseif ($prov -eq 'ngrok') { $tun = Start-Ngrok }
     elseif ($prov -eq 'bore') { $tun = Start-Bore }
     else {
-      # otomatis: ngrok kalau ada token (lebih stabil), lalu bore (tanpa akun)
-      if ($ngrokTok) { $tun = Start-Ngrok }
+      # otomatis = yang paling andal dulu: pinggy (terbukti 8/8 dari node luar)
+      if (-not $tun) { $tun = Start-Pinggy }
+      if (-not $tun -and $ngrokTok) { $tun = Start-Ngrok }
       if (-not $tun) { $tun = Start-Bore }
-      if (-not $tun -and -not $ngrokTok) { Log '  (tips: set secret NGROK_AUTHTOKEN untuk jalur kedua yang lebih stabil)' }
+      if (-not $tun) { Log '  (tips: set secret NGROK_AUTHTOKEN untuk jalur cadangan lain)' }
     }
     if (-not $tun) { $tunStatus = 'gagal'; Log "  GAGAL membuat tunnel (percobaan $att)."; break }
 
     $tunStatus = 'ok'
     Log '  RDP lewat tunnel: buka Remote Desktop Connection ke alamat di atas'
     Log "  listener $localPort sekarang: $(Get-RdpListenerState $localPort)"
+
+    # --- VERIFIKASI DARI LUAR (yang benar-benar dilihat klien HP) ---
+    $reach = Get-OutsideReach $tun.host $tun.port 90
+    $reachOk = if ($reach.ok) { 'ok' } else { 'gagal' }
+    $reachTxt = $reach.detail
+    if ($reach.ok) { Log "  UJI DARI LUAR OK - $reachTxt bisa menembus $($tun.host):$($tun.port)" }
+    else { Log "  UJI DARI LUAR GAGAL - $reachTxt (alamat ini kemungkinan tidak bisa dipakai dari HP)" }
 
     # --- self-test end-to-end: handshake X.224 lewat endpoint publik ---
     $stOk = 'gagal'
@@ -391,9 +436,32 @@ if ($useTunnel) {
       }
     }
 
-    if ($stOk -eq 'ok') { break }
+    if ($stOk -eq 'ok' -and $reachOk -eq 'ok') { break }
 
-    # tunnel hidup tapi belum tembus -> cek ulang RDP, kalau berubah ulangi tunnel
+    # tunnel hidup tapi belum terbukti dari luar -> ganti provider lain
+    if ($att -eq 1 -and $stOk -eq 'ok' -and $reachOk -ne 'ok') {
+      Log "  '$($tun.provider)' tembus dari dalam VM tapi TIDAK dari luar - ganti provider..."
+      try { Stop-Process -Id $tun.pid -Force -ErrorAction SilentlyContinue } catch {}
+      $tun = $null
+      if ($prov -in @('otomatis', 'auto', 'pinggy', 'ssh')) { $tun = Start-Pinggy }
+      if (-not $tun -and $ngrokTok) { $tun = Start-Ngrok }
+      if (-not $tun) { $tun = Start-Bore }
+      if ($tun) {
+        $stOk = 'gagal'
+        for ($try2 = 1; $try2 -le 4 -and $stOk -ne 'ok'; $try2++) {
+          $r2 = Test-RdpHandshake $tun.host $tun.port 15000
+          if ($r2.ok) { $stOk = 'ok'; Log "  SELF-TEST OK - $($tun.host):$($tun.port) [$($r2.detail)]" }
+          else { Start-Sleep -Seconds 8 }
+        }
+        $reach = Get-OutsideReach $tun.host $tun.port 90
+        $reachOk = if ($reach.ok) { 'ok' } else { 'gagal' }
+        $reachTxt = "$($reach.detail) [provider $($tun.provider)]"
+        Log "  uji luar (provider baru $($tun.provider)): $reachTxt"
+        if ($stOk -eq 'ok' -and $reachOk -eq 'ok') { break }
+      }
+    }
+
+    # RDP di VM belum sehat -> cek ulang, kalau berubah ulangi tunnel
     if ($att -eq 1) {
       Log '  tunnel belum tembus — cek ulang kesiapan RDP lalu ulangi tunnel dengan target terbaru'
       $t2 = Wait-RdpReady -TimeoutSec 150
@@ -436,8 +504,10 @@ $aksesObj = [ordered]@{
     address    = if ($tun) { "$($tun.host):$($tun.port)" } else { '' }
     rdp_local  = if ($tun) { "$(if ($script:RdpTarget) { $script:RdpTarget } else { '127.0.0.1' }) -> $(if ($localOk) { 'terbuka' } else { 'tertutup' })" } else { '' }
     selftest   = if ($tun) { $stOk } else { '' }
-    note2      = if ($tun -and $stOk -eq 'ok') { 'Tunnel sudah diuji end-to-end (handshake RDP X.224 lewat endpoint publik)' }
-                 elseif ($tun) { 'Tunnel hidup, tapi uji end-to-end belum lolos — coba lagi sebentar; jalur RustDesk tetap jalan' }
+    outside    = if ($tun) { "$reachOk ($reachTxt)" } else { '' }
+    note2      = if ($tun -and $stOk -eq 'ok' -and $reachOk -eq 'ok') { 'Tunnel diuji dua arah: handshake RDP dari dalam VM DAN dari node luar — inilah yang dilihat HP kamu' }
+                 elseif ($tun -and $reachOk -eq 'ok') { 'Alamat terbuka dari luar, tapi handshake RDP dari dalam belum lolos - coba lagi sebentar' }
+                 elseif ($tun) { 'Tunnel hidup di VM tetapi TIDAK terbukti terbuka dari luar - pakai jalur RustDesk untuk sesi ini' }
                  else { '' }
     note       = 'Isi Host+Port ini di XyDesk Remote (Koneksi RDP) atau mstsc; user ' + $u
   }
@@ -445,5 +515,5 @@ $aksesObj = [ordered]@{
 Update-Status @{ akses = $aksesObj } | Out-Null
 $aksesObj | ConvertTo-Json -Depth 8 | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
 
-Log "SELESAI — rustdesk=$rdStatus$(if ($rdId) { " ($rdId)" }) tunnel=$tunStatus$(if ($tun) { " ($($tun.host):$($tun.port))" })"
+Log "SELESAI — rustdesk=$rdStatus$(if ($rdId) { " ($rdId)" }) tunnel=$tunStatus$(if ($tun) { " ($($tun.provider) $($tun.host):$($tun.port), selftest=$stOk, luar=$reachOk)" })"
 exit 0

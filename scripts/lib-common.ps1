@@ -329,6 +329,43 @@ function Probe-Rdp([string]$Where, [string]$Address = '127.0.0.1') {
   return $r.ok
 }
 
+# ---------------------------------------------------------------------------
+#  Spot-check HTTPS dari ALAMAT LAIN (bukan dari VM)
+#  Kenapa penting: pada 3 Okt 2026 terbukti tunnel bisa "selftest ok" dari dalam
+#  VM (bore.pub:51782 menjawab X.224 dari dalam), TAPI dari internet port itu
+#  ditolak (6/8 node luar "connection refused"). Jadi "selftest ok" saja TIDAK
+#  cukup — alamat yang dipamerkan ke pengguna harus diuji dari luar.
+#  Layanan: check-host.net (tanpa akun, mendukung TCP).
+# ---------------------------------------------------------------------------
+function Get-OutsideReach([string]$HostName, [int]$Port, [int]$TimeoutSec = 90) {
+  $res = @{ ok = $false; detail = 'tidak diuji'; nodesOk = 0; nodesAll = 0 }
+  try {
+    $u = "https://check-host.net/check-tcp?host=$([uri]::EscapeDataString("$HostName`:$Port"))&max_nodes=6"
+    $req = Invoke-RestMethod -Uri $u -Headers @{ 'Accept' = 'application/json'; 'User-Agent' = 'XyRDP' } -TimeoutSec 30
+    if (-not $req.request_id) { $res.detail = 'check-host menolak'; return $res }
+    $rid = $req.request_id
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    Start-Sleep -Seconds 6
+    while ((Get-Date) -lt $deadline) {
+      $r = Invoke-RestMethod -Uri "https://check-host.net/check-result/$rid" -Headers @{ 'Accept' = 'application/json'; 'User-Agent' = 'XyRDP' } -TimeoutSec 30
+      $vals = @($r.PSObject.Properties | ForEach-Object { $_.Value })
+      if ($vals.Count -gt 0 -and -not ($vals | Where-Object { $null -eq $_ })) {
+        $ok = 0; $all = 0
+        foreach ($v in $vals) {
+          $all++
+          if ($v -is [array] -and $v.Count -gt 0 -and $v[0] -and $v[0].time) { $ok++ }
+        }
+        $res.nodesOk = $ok; $res.nodesAll = $all; $res.ok = ($ok -gt 0)
+        $res.detail = "$ok/$all node luar bisa tersambung"
+        return $res
+      }
+      Start-Sleep -Seconds 6
+    }
+    $res.detail = 'uji luar tidak selesai (timeout)'
+    return $res
+  } catch { $res.detail = $_.Exception.Message; return $res }
+}
+
 # ---------- unduhan ----------
 function Get-File([string]$Url, [string]$OutFile, [int]$TimeoutSec = 180) {
   for ($i = 1; $i -le 3; $i++) {

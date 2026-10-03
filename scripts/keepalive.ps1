@@ -16,6 +16,15 @@ $stop = (Get-Date).AddMinutes($dur - $buffer)
 Log "menahan sesi sampai $($stop.ToString('HH:mm:ss')) UTC ($dur menit total, buffer cleanup $buffer menit)"
 
 $nextPublish = (Get-Date).AddMinutes(30)
+# Pinggy gratis hanya berlaku 60 menit -> diperpanjang otomatis tiap ~50 menit
+# (alamat baru! dashboard akan menampilkan alamat terbaru; klien perlu masuk
+#  ulang dengan alamat itu, atau pakai RustDesk)
+$pinggyRenew = (Get-Date).AddMinutes(50)
+$pinggyPid = 0
+$stAwal = Read-Status
+if ($stAwal -and $stAwal.akses -and $stAwal.akses.tunnel -and $stAwal.akses.tunnel.provider -eq 'pinggy') {
+  Log 'catatan: tunnel pinggy (gratis) berumur 60 menit dan akan diperpanjang otomatis'
+}
 while ((Get-Date) -lt $stop) {
   $left = ($stop - (Get-Date)).ToString('hh\:mm')
 
@@ -56,6 +65,37 @@ while ((Get-Date) -lt $stop) {
 
   Log "hidup • RustDesk=$rdId • tunnel=$tun$(if ($tunHealth) { " ($tunHealth)" }) • sesi RDP=$sess • proses RD=$rdProc • sisa=$left"
 
+  # perpanjang tunnel pinggy sebelum kedaluwarsa (60 menit)
+  if ((Get-Date) -ge $pinggyRenew) {
+    $stP = Read-Status
+    if ($stP -and $stP.akses -and $stP.akses.tunnel -and $stP.akses.tunnel.provider -eq 'pinggy') {
+      Log 'pinggy mendekati kedaluwarsa (60 menit) - menghidupkan tunnel baru...'
+      try {
+        Get-Process ssh -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.StartTime -lt (Get-Date).AddMinutes(-45) } | Stop-Process -Force -ErrorAction SilentlyContinue
+        $ssh = (Get-Command ssh -ErrorAction SilentlyContinue).Source
+        $logF = 'C:\XyRDP\akses\pinggy.log'
+        Remove-Item $logF -ErrorAction SilentlyContinue
+        $tgt = if ($stP.akses.tunnel.rdp_local -match '^([0-9.]+)') { $Matches[1] } else { '127.0.0.1' }
+        Start-Process -FilePath $ssh -ArgumentList @('-p','443','-o','StrictHostKeyChecking=no','-o','UserKnownHostsFile=NUL','-o','ServerAliveInterval=20',"-R0:$tgt`:3389",'tcp@a.pinggy.io') -RedirectStandardOutput $logF -RedirectStandardError 'C:\XyRDP\akses\pinggy.err' -PassThru -WindowStyle Hidden | Out-Null
+        $novo = $null
+        for ($k = 1; $k -le 20 -and -not $novo; $k++) {
+          Start-Sleep -Seconds 3
+          $txt = (@(Get-Content $logF -Raw -ErrorAction SilentlyContinue) -join '') + (@(Get-Content 'C:\XyRDP\akses\pinggy.err' -Raw -ErrorAction SilentlyContinue) -join '')
+          if ($txt -match 'tcp://([a-zA-Z0-9.-]+):(\d+)') { $novo = @{ h = $Matches[1]; p = [int]$Matches[2] } }
+        }
+        if ($novo) {
+          $stP.akses.tunnel.host = $novo.h
+          $stP.akses.tunnel.port = $novo.p
+          $stP.akses.tunnel.address = "$($novo.h):$($novo.p)"
+          Update-Status @{ akses = $stP.akses } | Out-Null
+          & "$PSScriptRoot/publish-status.ps1" -Active $true | Out-Null
+          Log "pinggy diperpanjang -> alamat BARU $($novo.h):$($novo.p) (masuk ulang dengan alamat ini)"
+        } else { Log 'perpanjangan pinggy gagal - jalur RustDesk tetap jalan' }
+      } catch { Log "perpanjangan pinggy error: $($_.Exception.Message)" }
+    }
+    $pinggyRenew = (Get-Date).AddMinutes(50)
+  }
+
   # publish ulang status tiap 30 menit (heartbeat untuk dashboard)
   if ((Get-Date) -ge $nextPublish) {
     try {
@@ -64,6 +104,15 @@ while ((Get-Date) -lt $stop) {
       Log 'heartbeat: status di-publish ulang'
     } catch { Log "publish heartbeat gagal (tidak kritis): $($_.Exception.Message)" }
     $nextPublish = (Get-Date).AddMinutes(30)
+# Pinggy gratis hanya berlaku 60 menit -> diperpanjang otomatis tiap ~50 menit
+# (alamat baru! dashboard akan menampilkan alamat terbaru; klien perlu masuk
+#  ulang dengan alamat itu, atau pakai RustDesk)
+$pinggyRenew = (Get-Date).AddMinutes(50)
+$pinggyPid = 0
+$stAwal = Read-Status
+if ($stAwal -and $stAwal.akses -and $stAwal.akses.tunnel -and $stAwal.akses.tunnel.provider -eq 'pinggy') {
+  Log 'catatan: tunnel pinggy (gratis) berumur 60 menit dan akan diperpanjang otomatis'
+}
   }
 
   Start-Sleep -Seconds 300
