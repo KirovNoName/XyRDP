@@ -301,7 +301,6 @@ function Test-RdpHandshake([string]$Address, [int]$Port = 3389, [int]$TimeoutMs 
 # itu (atau $null). Kalau lama tidak ada, TermService di-restart sekali.
 function Wait-RdpReady([int]$TimeoutSec = 240, [int]$Port = 3389) {
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
-  $restarted = $false
   $lastState = ''
   while ((Get-Date) -lt $deadline) {
     $cands = @('127.0.0.1', '::1') + @(Get-LocalIPv4List) | Select-Object -Unique
@@ -311,16 +310,11 @@ function Wait-RdpReady([int]$TimeoutSec = 240, [int]$Port = 3389) {
     }
     $st = Get-RdpListenerState $Port
     if ($st -ne $lastState) { Log "  listener $Port : $st"; $lastState = $st }
-    $left = [int]($deadline - (Get-Date)).TotalSeconds
-    if (-not $restarted -and $left -gt 100) {
-      Log '  RDP belum menjawab handshake — restart TermService (paksa listener dibuat ulang)...'
-      try { Restart-Service TermService -Force -ErrorAction Stop; Log '  TermService sudah di-restart' }
-      catch { Log "  restart TermService gagal: $($_.Exception.Message)" }
-      $restarted = $true
-      Start-Sleep -Seconds 10
-    } else {
-      Start-Sleep -Seconds 8
-    }
+    # CATATAN: restart TermService SENGAJA tidak dilakukan lagi — pada runner
+    # GitHub, restart tidak menghidupkan kembali listener 3389 (terbukti di
+    # validasi 2026-10-03: menunggu 240s + 150s tetap mati). Kita cukup menunggu
+    # dan melaporkan apa adanya; penyebabnya sudah dihindari di setup-xydesk.
+    Start-Sleep -Seconds 8
   }
   Log "  RDP belum menjawab handshake setelah ${TimeoutSec}s"
   return $null
