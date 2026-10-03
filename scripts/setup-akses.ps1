@@ -29,10 +29,16 @@ $work     = 'C:\XyRDP\akses'
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 
 $mode = if ($env:AKSES) { $env:AKSES.Trim().ToLower() } else { 'keduanya' }
-if (@('rustdesk', 'rd', 'keduanya', 'both', 'dua', 'tunnel', 'rdp') -notcontains $mode) { $mode = 'keduanya' }
+if (@('rustdesk', 'rd', 'keduanya', 'both', 'dua', 'tunnel', 'rdp', 'tailscale', 'ts', 'semua', 'all') -notcontains $mode) { $mode = 'keduanya' }
 if (@('both', 'dua') -contains $mode) { $mode = 'keduanya' }
-$useRd     = ($mode -eq 'keduanya' -or $mode -eq 'rustdesk' -or $mode -eq 'rd')
-$useTunnel = ($mode -eq 'keduanya' -or $mode -eq 'tunnel' -or $mode -eq 'rdp')
+if ($mode -eq 'ts') { $mode = 'tailscale' }
+if ($mode -eq 'all') { $mode = 'semua' }
+$useRd     = ($mode -in @('keduanya', 'rustdesk', 'rd', 'semua'))
+$useTunnel = ($mode -in @('keduanya', 'tunnel', 'rdp', 'semua'))
+$useTs     = ($mode -in @('tailscale', 'semua'))
+$tsKey     = if ($env:TAILSCALE_AUTH_KEY) { $env:TAILSCALE_AUTH_KEY } else { $env:TS_AUTHKEY }
+$tsKeyTxt  = if ($tsKey) { 'ada' } else { 'TIDAK ADA' }
+Log "mode=$mode | rustdesk=$useRd tunnel=$useTunnel tailscale=$useTs (kunci $tsKeyTxt)"
 
 $prov = if ($env:TUNNEL_PROVIDER) { $env:TUNNEL_PROVIDER.Trim().ToLower() } else { 'otomatis' }
 if (@('otomatis', 'auto', 'bore', 'ngrok', 'pinggy', 'ssh') -notcontains $prov) { $prov = 'otomatis' }
@@ -410,6 +416,90 @@ function Start-Pinggy {
   return $null
 }
 
+# ---------------------------------------------------------------------------
+#  TAILSCALE (jalur yang sudah lama terbukti jalan dari runner GitHub):
+#  runner masuk tailnet kamu sebagai node 100.x, lalu HP (XyDesk Remote/mstsc)
+#  menyambung ke IP itu. Tanpa port publik, tanpa relay pihak ketiga.
+#  Bonus: dicoba `tailscale funnel` -> alamat publik <node>.<tailnet>.ts.net:10000
+#  yang bisa dipakai TANPA memasang apa pun di HP (kalau tailnet mengizinkan).
+# ---------------------------------------------------------------------------
+function Get-TsExe {
+  foreach ($p in @("$env:ProgramFiles\Tailscale\tailscale.exe", "${env:ProgramFiles(x86)}\Tailscale\tailscale.exe")) {
+    if (Test-Path $p) { return $p }
+  }
+  return $null
+}
+
+function Install-Tailscale {
+  $tsExe = Get-TsExe
+  if ($tsExe) { return $tsExe }
+  $msi = Join-Path $work 'tailscale.msi'
+  if (Get-File 'https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi' $msi 240) {
+    $r = Invoke-Cmd 'msiexec.exe' @('/i', $msi, '/qn', '/norestart') 420
+    Log "  tailscale: msiexec exit=$($r.code)"
+  }
+  $tsExe = Get-TsExe
+  if (-not $tsExe) {
+    $exe = Join-Path $work 'tailscale-setup.exe'
+    if (Get-File 'https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe' $exe 240) {
+      $r2 = Invoke-Cmd $exe @('/S') 420
+      Log "  tailscale: installer exe exit=$($r2.code)"
+    }
+  }
+  return (Get-TsExe)
+}
+
+function Start-Tailscale {
+  $tsExe = Install-Tailscale
+  if (-not $tsExe) { Log '  tailscale: instalasi gagal (msi & exe)'; return $null }
+  if (-not $tsKey) { Log '  tailscale: kunci auth kosong / tidak diteruskan workflow'; return $null }
+  $ver = ((Invoke-Cmd $tsExe @('version') 30).out -split "`n" | Select-Object -First 1)
+  Log "  tailscale: versi $ver"
+  $tsHost = ($env:HOSTNAME -replace '[^a-zA-Z0-9-]', '').ToLower().Trim('-'); if (-not $tsHost) { $tsHost = 'xyrdp' }
+  if ($tsHost.Length -gt 24) { $tsHost = $tsHost.Substring(0, 24) }
+  $tsHost = "$tsHost-$env:GITHUB_RUN_NUMBER"
+  Log "  tailscale: up sebagai '$tsHost'..."
+  # --accept-dns=false: jangan utak-atik DNS runner
+  $up = Invoke-Cmd $tsExe @('up', "--authkey=$tsKey", "--hostname=$tsHost", '--accept-dns=false', '--timeout=90s') 180
+  if ($up.code -ne 0) {
+    Log "  tailscale: up exit=$($up.code) - ulangi tanpa --accept-dns"
+    $up = Invoke-Cmd $tsExe @('up', "--authkey=$tsKey", "--hostname=$tsHost", '--timeout=90s') 180
+  }
+  $ip4 = ''
+  for ($i = 1; $i -le 30 -and -not $ip4; $i++) {
+    $r = Invoke-Cmd $tsExe @('ip', '-4') 20
+    if ($r.ok -and $r.out) {
+      $line = ($r.out -split "`n" | Where-Object { $_ -match '\d+\.\d+\.\d+\.\d+' } | Select-Object -First 1)
+      if ($line) { $ip4 = $line.Trim() }
+    }
+    if (-not $ip4) { Start-Sleep -Seconds 2 }
+  }
+  if (-not $ip4) { Log '  tailscale: TIDAK dapat IP 100.x (kunci salah/kedaluwarsa/tailnet menolak)'; return $null }
+  $dns = ''; $stTxt = ''
+  $sr = Invoke-Cmd $tsExe @('status', '--json') 30
+  if ($sr.ok -and $sr.out) {
+    try { $j = $sr.out | ConvertFrom-Json; $dns = "$($j.Self.DNSName)"; $stTxt = "$($j.BackendState)" } catch {}
+  }
+  Log "  tailscale: IP=$ip4 magicdns=$dns state=$stTxt"
+
+  # bonus: funnel (alamat publik tanpa app Tailscale di HP) - best effort
+  $funnel = 'tidak aktif'; $funnelAddr = ''
+  $f = Invoke-Cmd $tsExe @('funnel', '--bg', '--tcp', '10000', 'tcp://127.0.0.1:3389') 60
+  if ($f.code -ne 0) {
+    $srv = Invoke-Cmd $tsExe @('serve', '--bg', '--tcp', '10000', 'tcp://127.0.0.1:3389') 60
+    if ($srv.code -eq 0) { $f = Invoke-Cmd $tsExe @('funnel', '--bg', '--tcp', '10000') 60 }
+  }
+  if ($f.code -eq 0) {
+    $funnel = 'ok'
+    if ($dns) { $funnelAddr = (($dns.TrimEnd('.')) + ':10000') }
+    Log "  tailscale: FUNNEL OK -> $funnelAddr (bisa dipakai dari HP tanpa app Tailscale)"
+  } else {
+    $tail = (("$($f.err) $($f.out)") -replace '\s+', ' ').Trim()
+    Log "  tailscale: funnel tidak aktif (exit=$($f.code)$(if ($tail) { ': ' + $tail.Substring(0, [Math]::Min(150, $tail.Length)) })) - jalur IP 100.x tetap jalan"
+  }
+  return @{ exe = $tsExe; ip = $ip4; magicdns = $dns; host = $tsHost; funnel = $funnel; funnel_addr = $funnelAddr }
+}
+
 $tunStatus = 'skip'; $tun = $null; $localOk = $false; $stOk = 'skip'; $reachOk = 'skip'; $reachTxt = ''
 if ($useTunnel) {
   Log "TUNNEL TCP (RDP $localPort): menyiapkan..."
@@ -535,6 +625,16 @@ if ($useTunnel) {
 }
 
 # ============================================================================
+#  BAGIAN 3 - TAILSCALE (opsional)
+# ============================================================================
+$tsStatus = 'skip'; $ts = $null
+if ($useTs) {
+  Log 'TAILSCALE: menyiapkan...'
+  $ts = Start-Tailscale
+  if ($ts) { $tsStatus = 'ok' } else { $tsStatus = 'gagal'; Log '  GAGAL menyiapkan Tailscale. Jalur lain (RustDesk/tunnel) tetap dipakai.' }
+}
+
+# ============================================================================
 #  RANGKUMAN -> out/rdp-status.json
 # ============================================================================
 $aksesObj = [ordered]@{
@@ -545,6 +645,17 @@ $aksesObj = [ordered]@{
     id      = $rdId
     server = $rdServer
     client = 'Unduh app RustDesk (gratis) -> masukkan ID + password'
+  }
+  tailscale = [ordered]@{
+    status      = $tsStatus
+    ip          = if ($ts) { $ts.ip } else { '' }
+    magicdns    = if ($ts) { $ts.magicdns } else { '' }
+    hostname    = if ($ts) { $ts.host } else { '' }
+    funnel      = if ($ts) { $ts.funnel } else { '' }
+    funnel_addr = if ($ts) { $ts.funnel_addr } else { '' }
+    note        = if ($ts) { "Di HP: pasang app Tailscale + login akun yang sama, lalu Host=$($ts.ip) Port=$localPort di XyDesk Remote (atau mstsc). Funnel: $(if ($ts.funnel_addr) { $ts.funnel_addr } else { 'tidak aktif' })" }
+                  elseif ($useTs) { 'Tailscale gagal disiapkan (cek secret TAILSCALE_AUTH_KEY / log step Setup akses)' }
+                  else { 'tidak dipakai di sesi ini' }
   }
   tunnel   = [ordered]@{
     status     = $tunStatus
@@ -566,5 +677,5 @@ $aksesObj = [ordered]@{
 Update-Status @{ akses = $aksesObj } | Out-Null
 $aksesObj | ConvertTo-Json -Depth 8 | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
 
-Log "SELESAI — rustdesk=$rdStatus$(if ($rdId) { " ($rdId)" }) tunnel=$tunStatus$(if ($tun) { " ($($tun.provider) $($tun.host):$($tun.port), selftest=$stOk, luar=$reachOk)" })"
+Log "SELESAI — tailscale=$tsStatus$(if ($ts) { " ($($ts.ip))" }) rustdesk=$rdStatus$(if ($rdId) { " ($rdId)" }) tunnel=$tunStatus$(if ($tun) { " ($($tun.provider) $($tun.host):$($tun.port), selftest=$stOk, luar=$reachOk)" })"
 exit 0

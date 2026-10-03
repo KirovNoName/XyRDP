@@ -29,11 +29,26 @@ while ((Get-Date) -lt $stop) {
   $left = ($stop - (Get-Date)).ToString('hh\:mm')
 
   # info akses dari status file (sudah diisi setup-akses.ps1)
-  $rdId = '?'; $tun = '?'
+  $rdId = '?'; $tun = '?'; $tsIp = ''
   $st = Read-Status
   if ($st -and $st.akses) {
     if ($st.akses.rustdesk -and $st.akses.rustdesk.id) { $rdId = $st.akses.rustdesk.id }
     if ($st.akses.tunnel -and $st.akses.tunnel.address) { $tun = $st.akses.tunnel.address }
+    if ($st.akses.tailscale -and $st.akses.tailscale.ip) { $tsIp = $st.akses.tailscale.ip }
+  }
+  # Tailscale: pastikan node masih online (kalau tidak, coba naikkan lagi)
+  if ($tsIp) {
+    $tsExe = $null
+    foreach ($p in @("$env:ProgramFiles\Tailscale\tailscale.exe", "${env:ProgramFiles(x86)}\Tailscale\tailscale.exe")) {
+      if (Test-Path $p) { $tsExe = $p; break }
+    }
+    if ($tsExe) {
+      $stt = (& $tsExe status --json 2>$null | ConvertFrom-Json)
+      if ($stt -and $stt.BackendState -ne 'Running') {
+        Log "tailscale: state=$($stt.BackendState) - percobaan naik ulang"
+        try { & $tsExe up --timeout=60s 2>&1 | Out-Null } catch {}
+      }
+    }
   }
 
   # sesi RDP aktif
@@ -63,7 +78,7 @@ while ((Get-Date) -lt $stop) {
     }
   }
 
-  Log "hidup • RustDesk=$rdId • tunnel=$tun$(if ($tunHealth) { " ($tunHealth)" }) • sesi RDP=$sess • proses RD=$rdProc • sisa=$left"
+  Log "hidup • Tailscale=$tsIp • RustDesk=$rdId • tunnel=$tun$(if ($tunHealth) { " ($tunHealth)" }) • sesi RDP=$sess • proses RD=$rdProc • sisa=$left"
 
   # perpanjang tunnel pinggy sebelum kedaluwarsa (60 menit)
   if ((Get-Date) -ge $pinggyRenew) {

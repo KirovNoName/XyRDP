@@ -29,6 +29,15 @@ foreach ($name in @('bore', 'ngrok')) {
 }
 if ($killed -eq 0) { Log 'tidak ada proses tunnel yang berjalan' }
 
+# ---------- 2b. Tailscale: turunkan + logout supaya node tidak menumpuk ----------
+foreach ($p in @("$env:ProgramFiles\Tailscale\tailscale.exe", "${env:ProgramFiles(x86)}\Tailscale\tailscale.exe")) {
+  if (Test-Path $p) {
+    try { & $p down 2>&1 | Out-Null; Log 'tailscale: down (node dinonaktifkan)' } catch {}
+    try { & $p logout 2>&1 | Out-Null; Log 'tailscale: logout (node dilepas dari tailnet)' } catch {}
+    break
+  }
+}
+
 # ---------- 3. Bersihkan sisa kredensial lokal (opsional/kebersihan) ----------
 try {
   $rdCfg = Join-Path $env:APPDATA 'RustDesk\config\RustDesk2.toml'

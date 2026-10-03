@@ -43,12 +43,14 @@ on:
         default: "xyrdp"
         type: string
       akses:
-        description: "Jalur akses: tunnel RDP (untuk XyDesk/mstsc), RustDesk, atau keduanya"
+        description: "Jalur akses: tailscale (IP 100.x, paling andal), tunnel RDP, RustDesk, atau kombinasi"
         required: false
         default: "keduanya"
         type: choice
         options:
           - "keduanya"
+          - "tailscale"
+          - "semua"
           - "rustdesk"
           - "tunnel"
       tunnel_provider:
@@ -127,6 +129,9 @@ jobs:
       RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
       # ngrok (opsional): akun gratis -> authtoken -> secret repo. Kosong = pakai bore.pub
       NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+      # Tailscale: jalur akses paling andal dari runner GitHub (IP 100.x).
+      # Dipakai kalau input akses = tailscale / semua (tidak dipakai di default).
+      TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
       # PAT scope repo — buat hapus run lama (opsional; kosong = cleanup dilewati)
       CLEANUP_TOKEN: ${{ secrets.CLEANUP_TOKEN }}
       KEEP_RUNS: "3"

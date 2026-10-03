@@ -131,6 +131,8 @@
         <button class="mini" data-copy="cTunPort">SALIN PORT</button>
         <button class="mini" data-copy="cTunAll">SALIN HOST:PORT</button></span></div>
       <div class="hint" id="cWarn"></div>
+      <div class="row"><span class="k">Tailscale (IP 100.x)</span>
+        <span class="v"><span id="cTs">-</span> <button class="mini" data-copy="cTs">SALIN IP</button></span></div>
       <div class="row"><span class="k">Kesiapan RDP di VM</span><span class="v" id="cRdp">-</span></div>
       <div class="row"><span class="k">Server RustDesk</span><span class="v" id="cRdSrv">-</span></div>
       <div class="row"><span class="k">Pengguna</span>
@@ -256,7 +258,7 @@
       // seluruh render berhenti (bug lama: $('cRdSrv') tidak ada -> TypeError
       // membuat baris tunnel & sisa render tidak pernah jalan)
       setTxt=function(id,txt){var el=$(id);if(el)el.textContent=txt;if(el)el.title=txt||'';},
-      cfg={}, authed=false, lastRun=null, passShown=false, stopArmed=0, t0=null, t1=null, wpData=null, cTunRaw='';
+      cfg={}, authed=false, lastRun=null, passShown=false, stopArmed=0, t0=null, t1=null, wpData=null, cTunRaw='', cTsRaw='';
 
   function flash(msg){var f=$('flash');f.textContent=msg;f.classList.add('show');
     clearTimeout(f._t);f._t=setTimeout(function(){f.classList.remove('show')},2400)}
@@ -327,7 +329,7 @@
       setTxt('stExtras',extrasText(g));
       // --- akses: RustDesk + tunnel ---
       var a=g&&g.akses?g.akses:null;
-      var modeTxt={keduanya:'Tunnel (XyDesk/mstsc) + RustDesk',rustdesk:'RustDesk saja',tunnel:'Tunnel RDP saja'};
+      var modeTxt={keduanya:'Tunnel (XyDesk/mstsc) + RustDesk',rustdesk:'RustDesk saja',tunnel:'Tunnel RDP saja',tailscale:'Tailscale (IP 100.x)',semua:'Tailscale + Tunnel + RustDesk'};
       var provTxt=a&&a.tunnel&&a.tunnel.provider?(' ['+a.tunnel.provider.toUpperCase()+(a.tunnel.provider==='pinggy'?' - berlaku 60 mnt, diperpanjang otomatis':'')+']'):'';
       setTxt('cMode',(a?(modeTxt[a.mode]||a.mode):'-')+provTxt);
       var rdId=a&&a.rustdesk?a.rustdesk.id:'';
@@ -338,6 +340,9 @@
       if(tun&&a.tunnel.selftest)tunTxt+=(' ['+(a.tunnel.selftest==='ok'?'self-test ok':'self-test '+a.tunnel.selftest)+']');
       if(tun&&a.tunnel.outside)tunTxt+=(' [luar '+(a.tunnel.outside.indexOf('ok (')===0?('ok '+a.tunnel.outside.slice(3)):a.tunnel.outside)+']');
       setTxt('cTun',tunTxt);
+      var ts=a&&a.tailscale?a.tailscale:null;
+      cTsRaw=(ts&&ts.ip)?ts.ip:'';
+      setTxt('cTs',ts&&ts.status==='ok'?(ts.ip+(ts.funnel==='ok'&&ts.funnel_addr?(' · funnel '+ts.funnel_addr):'')):(ts&&ts.status==='gagal'?'gagal disiapkan':'tidak dipakai'));
       var xd=g&&g.xydesk?g.xydesk:null;
       setTxt('cRdp',(xd&&xd.rdp_ready)?xd.rdp_ready:(g&&g.rdp_listen?String(g.rdp_listen):'-'));
       setTxt('cTunNote',(a&&a.tunnel&&a.tunnel.selftest!=='ok'&&a.tunnel.note2)?('Catatan tunnel: '+a.tunnel.note2):'');
@@ -345,7 +350,8 @@
       var warnEl=$('cWarn');
       if(warnEl){
         var w='',wc='';
-        if(!(g&&g.active)){w='⚠️ TIDAK ADA SESI AKTIF. Alamat di atas (kalau ada) sudah tidak berlaku — alamat tunnel BERGANTI setiap sesi baru, jadi jangan pakai alamat dari sesi sebelumnya. Tekan MULAI, lalu tunggu ±5 menit sampai status AKTIF dan "Kesiapan RDP" hijau.';wc='bad'}
+        if(g&&g.active&&ts&&ts.status==='ok'&&ts.ip){w='✅ Jalur paling andal: pasang app Tailscale di HP + login akun yang sama, lalu Host='+ts.ip+' Port='+((a&&a.tunnel&&a.tunnel.port)?3389:3389)+' (user/`password` seperti di bawah).';wc='ok'}
+        else if(!(g&&g.active)){w='⚠️ TIDAK ADA SESI AKTIF. Alamat di atas (kalau ada) sudah tidak berlaku — alamat tunnel BERGANTI setiap sesi baru, jadi jangan pakai alamat dari sesi sebelumnya. Tekan MULAI, lalu tunggu ±5 menit sampai status AKTIF dan "Kesiapan RDP" hijau.';wc='bad'}
         else if(!tun){w='⏳ Sesi sedang disiapkan / tunnel belum terbentuk. Tunggu ±5 menit lalu muat ulang halaman ini — alamat akan muncul di baris di atas.'}
         else if(a&&a.tunnel&&a.tunnel.selftest!=='ok'){w='⚠️ Tunnel hidup tapi uji end-to-end belum lolos — coba lagi sebentar, atau pakai RustDesk.';wc='bad'}
         else {w='✅ Alamat ini segar dari sesi yang sedang jalan'+(g&&g.run_number?(' (run #'+g.run_number+')'):'')+(en?(' dan berlaku sampai '+fmt(en)):'')+'.';wc='ok'}
@@ -405,6 +411,7 @@
       else if(src==='cTunHost')txt=cTunRaw?cTunRaw.split(':')[0]:'';
       else if(src==='cTunPort')txt=cTunRaw?cTunRaw.split(':')[1]:'';
       else if(src==='cTunAll')txt=cTunRaw||'';
+      else if(src==='cTs')txt=(cTsRaw||'');
       function done(){b.textContent='TERSALIN';setTimeout(function(){b.textContent='SALIN'},1200)}
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done)}
       else{var t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);
