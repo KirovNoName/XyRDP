@@ -249,13 +249,26 @@ function Get-File([string]$Url, [string]$OutFile, [int]$TimeoutSec = 180) {
 }
 
 # Get-GhAssetUrl <owner/repo> <regex nama asset> -> url unduhan asset terbaru
+# Pakai GITHUB_TOKEN supaya tidak kena rate-limit 403 (kejadian nyata di runner:
+# IP bersama GitHub-hosted sering sudah habis kuota API anonim).
 function Get-GhAssetUrl([string]$Repo, [string]$NameRegex) {
-  try {
-    $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers @{ 'User-Agent' = 'XyRDP' } -TimeoutSec 60
-    $a = $rel.assets | Where-Object { $_.name -match $NameRegex } | Select-Object -First 1
-    if ($a) { return @{ url = $a.browser_download_url; tag = $rel.tag_name; name = $a.name } }
-  } catch { Log "  GitHub API ($Repo) gagal: $($_.Exception.Message)" }
+  $hdrs = @{ 'User-Agent' = 'XyRDP' }
+  if ($env:GITHUB_TOKEN) { $hdrs['Authorization'] = "Bearer $($env:GITHUB_TOKEN)" }
+  foreach ($h in @($hdrs, @{ 'User-Agent' = 'XyRDP' })) {
+    try {
+      $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers $h -TimeoutSec 60
+      $a = $rel.assets | Where-Object { $_.name -match $NameRegex } | Select-Object -First 1
+      if ($a) { return @{ url = $a.browser_download_url; tag = $rel.tag_name; name = $a.name } }
+    } catch { Log "  GitHub API ($Repo) gagal: $($_.Exception.Message)" }
+  }
   return $null
+}
+
+# fallback URL keras (kalau API tidak bisa dipakai sama sekali)
+$script:XyFallbackUrls = @{
+  'rustdesk/rustdesk.msi' = 'https://github.com/rustdesk/rustdesk/releases/download/1.5.0/rustdesk-1.5.0-x86_64.msi'
+  'rustdesk/rustdesk.exe' = 'https://github.com/rustdesk/rustdesk/releases/download/1.5.0/rustdesk-1.5.0-x86_64.exe'
+  'ekzhang/bore.zip'      = 'https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-x86_64-pc-windows-msvc.zip'
 }
 
 Log 'lib-common dimuat'
