@@ -344,7 +344,7 @@
       setTxt('cTun',tunTxt);
       var ts=a&&a.tailscale?a.tailscale:null;
       cTsRaw=(ts&&ts.ip)?ts.ip:'';
-      setTxt('cTs',ts&&ts.status==='ok'?(ts.ip+(ts.funnel==='ok'&&ts.funnel_addr?(' · funnel '+ts.funnel_addr):'')):(ts&&ts.status==='gagal'?'gagal disiapkan':'tidak dipakai'));
+      setTxt('cTs',ts&&ts.status==='ok'?(ts.ip+(ts.funnel==='ok'&&ts.funnel_addr?(' · funnel '+ts.funnel_addr+' (hanya klien TLS)'):'')):(ts&&ts.status==='gagal'?'gagal disiapkan':'tidak dipakai'));
       var xd=g&&g.xydesk?g.xydesk:null;
       setTxt('cRdp',(xd&&xd.rdp_ready)?xd.rdp_ready:(g&&g.rdp_listen?String(g.rdp_listen):'-'));
       setTxt('cTunNote',(a&&a.tunnel&&a.tunnel.selftest!=='ok'&&a.tunnel.note2)?('Catatan tunnel: '+a.tunnel.note2):'');
