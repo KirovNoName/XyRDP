@@ -1,5 +1,4 @@
-name: XyRDP — RDP baru dijeda
-run-name: "XyRDP ${{ inputs.hostname || 'xyrdp' }} • ${{ inputs.durasi_menit || '360' }} mnt • ${{ inputs.akses || 'keduanya' }}"
+name: XyRDP — RDP baru
 on:
   workflow_dispatch:
     inputs:
