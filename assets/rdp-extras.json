@@ -1,5 +1,5 @@
 {
-  "lightshot": false,
+  "lightshot": true,
   "translucent": true,
   "translucent_mode": "clear",
   "wallpaper": true,
@@ -10,7 +10,7 @@
   "xydesk_host": true,
   "dark_theme": true,
   "lightweight_mode": true,
-  "vscode": false,
-  "notepadpp": false,
+  "vscode": true,
+  "notepadpp": true,
   "rdp_user": "xyadmin"
 }
