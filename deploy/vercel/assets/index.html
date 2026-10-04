@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dasbor</title>
+<title>XyRDP — sesi baru dijeda</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23161618'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%236a6a70'/%3E%3C/svg%3E">
 <style>
   :root{
@@ -103,6 +103,13 @@
   .steps b{color:#9a9aa2}
   .header-guide{flex:none;margin-left:auto;color:#a989c7;border:1px solid #34273f;border-radius:5px;padding:5px 9px;font-size:10px;letter-spacing:.08em}
   .header-guide:hover{color:#e4c5ff;border-color:#604479;text-decoration:none}
+  .pause-banner{max-width:1180px;margin:14px auto 0;padding:15px 18px;border:1px solid #6b3c35;border-left:4px solid #e08c64;border-radius:7px;background:linear-gradient(120deg,#2a1718,#191416);color:#ead2c8}
+  .pause-banner strong{display:block;color:#ffbb9f;font-size:13px;letter-spacing:.04em}
+  .pause-banner p{margin:5px 0 8px;color:#c7aba4;font-size:11.5px;line-height:1.65}
+  .pause-links{display:flex;gap:14px;flex-wrap:wrap;font-size:11px}.pause-links a{color:#ffc4a9;text-decoration:underline;text-underline-offset:3px}
+  .pause-inline{padding:14px;border:1px solid #613b35;border-radius:5px;background:#211718;color:#d5b7ae;font-size:12px;line-height:1.7}
+  .pause-inline strong{display:block;color:#ffbb9f;margin-bottom:5px}
+  fieldset.paused-fieldset{min-width:0;border:0;padding:0;margin:0;width:100%;opacity:.55}
   .turnstile-shell{margin-top:12px;padding:10px;background:#101012;border:1px solid var(--line);border-radius:5px;min-height:74px}
   .turnstile-shell .hint{margin:4px 0 0}
   .welcome-overlay{display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;padding:18px;background:rgba(5,4,9,.82);backdrop-filter:blur(9px)}
@@ -131,6 +138,11 @@
   <a class="header-guide" href="/panduan" id="guideHeader">PANDUAN ↗</a>
   <button class="mini hidden" id="bLogout" style="margin-left:10px">KELUAR</button>
 </header>
+<div class="pause-banner" role="alert" aria-labelledby="pauseTitle">
+  <strong id="pauseTitle">JEDA LAYANAN — jangan mulai sesi RDP baru</strong>
+  <p>Dashboard dan workflow resmi kini memblokir sesi baru. GitHub-hosted Actions bukan layanan desktop RDP umum; penggunaan seperti ini berisiko membuat job/repo dibatasi atau akun ditangguhkan. Ini bukan akibat secret Tailscale yang kosong. Sesi yang sudah berjalan tidak dibatalkan otomatis.</p>
+  <div class="pause-links"><a href="/panduan">Baca alasan dan langkah aman</a><a href="https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features#actions" target="_blank" rel="noopener">Ketentuan GitHub Actions ↗</a><a href="https://docs.github.com/en/site-policy/acceptable-use-policies/github-appeal-and-reinstatement" target="_blank" rel="noopener">Ajukan appeal resmi ↗</a></div>
+</div>
 
 <main id="dashboard">
   <section class="panel center hidden" id="loginBox">
@@ -150,10 +162,8 @@
       <div class="btns"><button class="primary" id="lgo" style="width:100%">Masuk admin</button></div>
     </div>
     <div class="note" id="lerr"></div>
-    <div class="hint">Login GitHub → dashboard otomatis menyiapkan <b>repo kerja milikmu sendiri</b>
-      (kopi dari template), lalu semua sesi RDP jalan di repo itu. Token &amp; secret kamu
-      <b>tidak disimpan di server ini</b> — hanya di cookie sesi browser (terenkripsi) dan di repo kamu sendiri.</div>
-    <div class="hint"><a href="/panduan">Buka panduan lengkap sebelum menggunakan XyRDP ↗</a></div>
+    <div class="hint">Login hanya untuk melihat status repo/run lama dan mengelola atau mencabut secret. Pembuatan repo, penyimpanan pengaturan baru, serta sesi RDP baru sedang dijeda.</div>
+    <div class="hint"><a href="/panduan">Baca alasan jeda dan langkah aman ↗</a></div>
   </section>
 
   <div id="app" class="grid hidden">
@@ -161,7 +171,7 @@
       <h2>Repo kamu <span class="pill" id="rpPill">-</span></h2>
       <div class="row"><span class="k">Akun GitHub</span><span class="v" id="rpWho">-</span></div>
       <div class="row"><span class="k">Repo kerja</span><span class="v" id="rpRepo">-</span></div>
-      <div class="row"><span class="k">Secret wajib</span><span class="v" id="rpSecrets">-</span></div>
+      <div class="row"><span class="k">Inventaris secret <small>(nama saja)</small></span><span class="v" id="rpSecrets">-</span></div>
       <div class="row"><span class="k">Izin Actions</span><span class="v" id="rpPerms">-</span></div>
       <div class="two" id="rpCreateWrap">
         <div><label>Nama repo (kalau belum ada)</label><input id="rpName" value="XyRDP" spellcheck="false"></div>
@@ -171,16 +181,11 @@
         </select></div>
       </div>
       <div class="btns">
-        <button class="primary" id="rpSetup" style="flex:2">BUAT / PERIKSA REPO SAYA</button>
-        <button id="rpSecretsBtn" style="flex:1">BUKA SECRETS</button>
+        <button class="primary" id="rpSetup" style="flex:2" disabled>PEMBUATAN / PERBAIKAN DIJEDA</button>
+        <button id="rpSecretsBtn" style="flex:1">KELOLA SECRETS</button>
       </div>
-      <div class="note" id="rpNote"></div>
-      <div class="hint steps">Alur: <b>1)</b> klik tombol di atas — repo kamu dibuat dari template
-        <span id="rpTpl">-</span> dan izin Actions dirapikan otomatis. <b>2)</b> Isi secret di
-        <code>Settings → Secrets and variables → Actions</code>: <code>RDP_PASSWORD</code> (kata sandi
-        login RDP-mu) dan <code>TAILSCALE_AUTH_KEY</code> (auth key dari akun Tailscale-mu; buat di
-        admin console → Settings → Keys, pilih <i>reusable</i>). <b>3)</b> Klik periksa lagi → tombol
-        NYALAKAN aktif. Yang wajib cuma 2 itu; <code>NGROK_AUTHTOKEN</code>/<code>CLEANUP_TOKEN</code> opsional.</div>
+      <div class="note" id="rpNote">Pemeriksaan ini hanya menampilkan nama secret—dashboard tidak dapat membaca nilainya.</div>
+      <div class="hint steps">Jangan buat repo atau tambahkan secret baru untuk memulai RDP selama jeda. Bila repo lama tidak akan dipakai, buka pengaturan secret untuk menghapus/revoke yang sudah tidak dibutuhkan. Untuk repo template lama, nonaktifkan workflow dari tab <code>Actions</code>; perubahan template tidak otomatis masuk ke salinan lama.</div>
       <div class="hint" id="rpWarn"></div>
     </div>
 
@@ -222,7 +227,7 @@
           style="max-width:210px;display:inline-block;padding:5px 8px"> <button class="mini" id="cPassSave">SIMPAN</button></span></div>
       <div class="row"><span class="k">RustDesk ID <small>(cadangan)</small></span>
         <span class="v"><span id="cRdId">-</span> <button class="mini" data-copy="cRdId">SALIN</button></span></div>
-      <div class="hint"><b>Dari HP (XyDesk Remote):</b> buka <b>Koneksi RDP Penuh</b> → kolom <b>Host</b> = bagian
+      <div class="hint"><b>Hanya untuk run lama yang masih aktif.</b> Dari HP (XyDesk Remote): buka <b>Koneksi RDP Penuh</b> → kolom <b>Host</b> = bagian
         sebelum tanda <code>:</code>, kolom <b>Port</b> = bagian setelahnya (bisa juga tempel
         <code>host:port</code> di kolom host). Login <b id="cUserInline">xyadmin</b> + kata sandi di atas. AVC444, ClearType,
         clipboard, keyboard, dan <b>audio</b> jalan lewat jalur ini; kalau sertifikat RDP ditanya, terima
@@ -233,50 +238,23 @@
     </div>
 
     <div class="panel">
-      <h2>Kontrol</h2>
-      <div class="two">
-        <div><label>Durasi</label>
-          <select id="fDur">
-            <option value="15">15 menit (uji)</option>
-            <option value="60">1 jam</option>
-            <option value="180">3 jam</option>
-            <option value="300">5 jam</option>
-            <option value="360" selected>6 jam</option>
-          </select></div>
-        <div><label>Hostname</label><input id="fHost" value="xyrdp" spellcheck="false"></div>
+      <h2>Kontrol sesi</h2>
+      <div class="pause-inline"><strong>RDP BARU DINONAKTIFKAN</strong>
+        Tidak ada durasi atau jalur akses yang dapat menyalakan sesi baru saat ini. Jangan membuat salinan repo tambahan atau mencoba dispatch manual untuk melewati jeda.
+        <div class="pause-links" style="margin-top:8px"><a href="/panduan">Langkah aman &amp; bantuan akun</a></div>
       </div>
-      <div class="two">
-        <div><label>Jalur akses</label>
-          <select id="fAkses">
-            <option value="tailscale" selected>Tailscale (IP 100.x) — paling andal, dipakai XyDesk Remote</option>
-            <option value="keduanya">Tunnel (bore/pinggy/ngrok) + RustDesk</option>
-            <option value="semua">Semua: Tailscale + tunnel + RustDesk</option>
-            <option value="rustdesk">RustDesk saja</option>
-            <option value="tunnel">Tunnel RDP saja (bore/pinggy/ngrok)</option>
-          </select></div>
-        <div><label>Provider tunnel</label>
-          <select id="fProv">
-            <option value="otomatis" selected>Otomatis</option>
-            <option value="bore">bore.pub (tanpa akun)</option>
-            <option value="ngrok">ngrok (butuh token)</option>
-          </select></div>
-      </div>
-      <div class="row" style="margin-top:6px"><span class="k">Tampilan Windows 10</span>
-        <span class="v"><label class="switch"><input type="checkbox" id="fWin10" checked><i></i></label></span></div>
-      <div class="row" style="margin-top:6px"><span class="k">Kompatibilitas grafis software <small>(Mesa CPU, bukan GPU fisik)</small></span>
-        <span class="v"><label class="switch"><input type="checkbox" id="fGrafis" checked><i></i></label></span></div>
-      <div class="hint" style="margin-top:4px">Runner = Windows Server 2022 bergaya Windows 10. Grafis software dapat membantu aplikasi 2D/ringan; game 3D tidak dijamin. RAM runner ditetapkan GitHub—profil ringan hanya mengurangi sebagian beban latar.</div>
       <div class="btns">
-        <button class="primary" id="bStart" style="flex:2">NYALAKAN</button>
-        <button class="danger" id="bStop" style="flex:1">MATIKAN</button>
+        <button class="primary" id="bStart" style="flex:2" disabled title="Sesi baru dijeda">SESI BARU DIJEDA</button>
+        <button class="danger" id="bStop" style="flex:1">MATIKAN RUN SAYA</button>
       </div>
-      <div class="note" id="opNote"></div>
-      <div class="hint">Jalur utama dari HP = <b>Tailscale</b> + <b>XyDesk Remote</b>: login Tailscale di HP dengan akun yang sama, lalu isi IP <code>100.x</code> dari panel Koneksi dan port <code>3389</code>. Tunnel/RustDesk tetap opsi alternatif. Satu sesi aktif; permintaan baru otomatis mengantre. Saat sesi berakhir, VM dan jalur akses dimatikan.</div>
+      <div class="note" id="opNote">MATIKAN hanya mengirim stop ke run di repo yang sedang login; tidak dijalankan otomatis.</div>
+      <div class="hint">Run yang sudah berjalan tidak diubah oleh jeda ini. Periksa statusnya di panel Sesi. Jangan menekan MATIKAN jika kamu tidak ingin menghentikan run milik repo tersebut.</div>
     </div>
 
     <div class="panel">
       <h2>Tampilan <span class="pill" id="exPill">-</span></h2>
 
+      <fieldset disabled class="paused-fieldset" aria-label="Pengaturan visual dinonaktifkan selama jeda">
       <div class="drop" id="wpDrop">
         <input type="file" id="wpFile" accept="image/png,image/jpeg,image/bmp" class="hidden">
         <img id="wpPrev" class="hidden" alt="pratinjau wallpaper">
@@ -324,7 +302,8 @@
         <span class="v"><label class="switch"><input type="checkbox" id="exLs"><i></i></label></span></div>
       <div class="btns"><button id="exSave" style="flex:1">SIMPAN PENGATURAN</button></div>
       <div class="note" id="exNote"></div>
-      <div class="hint">Berlaku otomatis pada sesi <b>berikutnya</b>. Pengaturan disimpan di repo (<code>assets/rdp-extras.json</code>); username yang diubah ikut tersimpan saat klik Simpan atau mulai sesi.</div>
+      </fieldset>
+      <div class="hint">Wallpaper dan pengaturan visual tidak akan diterapkan selama sesi baru dijeda. Status sukses lama tidak selalu membuktikan gambar tampil pada profil RDP; jangan unggah ulang dulu. Diagnosis wallpaper akan dilanjutkan bila ada host desktop yang sesuai.</div>
     </div>
 
     <div class="panel" style="grid-column:1/-1">
@@ -344,12 +323,12 @@
 <div class="flash" id="flash"></div>
 <div class="welcome-overlay" id="guideWelcome" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle" aria-describedby="welcomeDesc">
   <div class="welcome-card" tabindex="-1">
-    <div class="welcome-eyebrow">XYRDP · PANDUAN SEBELUM MULAI</div>
-    <h2 id="welcomeTitle">Siapkan repo dan secret dengan aman.</h2>
-    <p id="welcomeDesc">Sebelum masuk, luangkan beberapa menit untuk melihat alur login GitHub, membuat repo milikmu, menambahkan dua secret, dan menghubungkan RDP dari HP. Sesi berjalan di VM sementara—bukan penyimpanan permanen.</p>
-    <div class="welcome-points"><span><b>01 · Repo sendiri</b>Login GitHub → template</span><span><b>02 · Dua secret</b>RDP + Tailscale</span><span><b>03 · Sambungkan</b>HP → XyDesk Remote</span></div>
-    <div class="welcome-actions"><a id="guideRead" href="/panduan">LIHAT PANDUAN LENGKAP ↗</a><button id="guideContinue" class="primary">SAYA PAHAM — LANJUT</button></div>
-    <button id="guideLater" class="mini" style="width:100%;margin-top:8px">Lihat nanti</button>
+    <div class="welcome-eyebrow">XYRDP · LAYANAN DIJEDA</div>
+    <h2 id="welcomeTitle">Sesi RDP baru sedang dijeda.</h2>
+    <p id="welcomeDesc">Jangan membuat repo/secret baru atau menjalankan workflow untuk melewati jeda. GitHub-hosted Actions dibatasi untuk pengembangan dan pengujian proyek terkait. Buka panduan untuk melihat alasan, mengamankan secret, dan mengajukan appeal.</p>
+    <div class="welcome-points"><span><b>01 · Jangan dispatch</b>Start baru diblokir</span><span><b>02 · Amankan key</b>Hapus/revoke jika tak dipakai</span><span><b>03 · Banding resmi</b>Gunakan form GitHub</span></div>
+    <div class="welcome-actions"><a id="guideRead" href="/panduan">ALASAN &amp; LANGKAH AMAN ↗</a><button id="guideContinue" class="primary">MENGERTI — TUTUP</button></div>
+    <button id="guideLater" class="mini" style="width:100%;margin-top:8px">Tutup</button>
   </div>
 </div>
 
@@ -400,18 +379,29 @@
         (m.repo_exists?(' <small>'+(m.private?'privat':'publik')+'</small>'):'');
       setTxt('rpName',m.repo);
       var miss=m.missing_required||[];
-      $('rpSecrets').innerHTML=(m.repo_exists
-        ? ((miss.length?('<span class="pill err">KURANG: '+miss.join(', ')+'</span>'):'<span class="pill ok">LENGKAP</span>')+
-           ((m.missing_optional&&m.missing_optional.length)?(' <small>opsional: '+m.missing_optional.join(', ')+'</small>'):''))
-        : '<span class="pill mid">repo belum dibuat</span>');
+      if(m.rdp_start_paused){
+        var names=m.secrets||[];
+        $('rpSecrets').textContent=m.repo_exists?(names.length?('terdaftar: '+names.join(', ')):'tidak ada nama secret terdeteksi'):'repo belum dibuat';
+      }else{
+        $('rpSecrets').innerHTML=(m.repo_exists
+          ? ((miss.length?('<span class="pill err">KURANG: '+miss.join(', ')+'</span>'):'<span class="pill ok">LENGKAP</span>')+
+             ((m.missing_optional&&m.missing_optional.length)?(' <small>opsional: '+m.missing_optional.join(', ')+'</small>'):''))
+          : '<span class="pill mid">repo belum dibuat</span>');
+      }
       $('rpPerms').innerHTML=(m.actions_enabled===false?'<span class="pill err">Actions mati</span>':'<span class="pill ok">aktif</span>')+
         ' <small>token: '+(m.workflow_permissions||'-')+'</small>';
-      $('rpPill').textContent=m.ready?'siap':(m.repo_exists?'perlu secret':'perlu dibuat');
-      $('rpPill').className='pill '+(m.ready?'ok':(m.repo_exists?'err':'mid'));
-      $('rpCreateWrap').classList.toggle('hidden',!!m.repo_exists);
-      $('rpSetup').textContent=m.repo_exists?'PERIKSA / RAPIKAN LAGI':'BUAT REPO DARI TEMPLATE';
-      $('rpWarn').textContent=(m.setup_note?('Catatan: '+m.setup_note+' '):'')+
-        (isUser&&!m.ready&&m.repo_exists?('Sesi tidak bisa dinyalakan sebelum '+((m.missing_required||[]).join(' & '))+' diisi.'):'');
+      var paused=!!m.rdp_start_paused;
+      $('rpPill').textContent=paused?'JEDA':(m.ready?'siap':(m.repo_exists?'perlu secret':'perlu dibuat'));
+      $('rpPill').className='pill '+(paused?'err':(m.ready?'ok':(m.repo_exists?'err':'mid')));
+      $('rpCreateWrap').classList.toggle('hidden',paused||!!m.repo_exists);
+      $('rpSetup').disabled=paused;
+      $('rpSetup').textContent=paused?'PEMBUATAN / PERBAIKAN DIJEDA':(m.repo_exists?'PERIKSA / RAPIKKAN LAGI':'BUAT REPO DARI TEMPLATE');
+      $('rpSecretsBtn').disabled=paused&&!m.repo_exists;
+      $('rpSecretsBtn').textContent=m.repo_exists?'KELOLA SECRETS':'SECRETS TIDAK DIPERLUKAN';
+      $('bStart').disabled=paused;
+      $('rpWarn').textContent=paused?'Sesi baru dijeda: tombol start, pembuatan repo, dan penulisan pengaturan tidak tersedia. Kamu boleh membuka pengaturan repo lama untuk menghapus secret yang tak digunakan.':
+        ((m.setup_note?('Catatan: '+m.setup_note+' '):'')+
+        (isUser&&!m.ready&&m.repo_exists?('Sesi tidak bisa dinyalakan sebelum '+((m.missing_required||[]).join(' & '))+' diisi.') :''));
       // kata sandi: user menyimpannya sendiri di browser (server tidak tahu)
       var lp='';try{lp=localStorage.getItem('xyrdp_pass_'+m.owner+'_'+m.repo)||''}catch(e){}
       $('cPassLocalRow').classList.toggle('hidden',!isUser);
@@ -455,6 +445,7 @@
   }
 
   function doSetup(){
+    if(!me||me.rdp_start_paused!==false){$('rpNote').textContent='Jeda aktif: repo baru tidak dibuat dan Actions tidak diaktifkan. Baca /panduan.';return}
     var b=$('rpSetup');b.disabled=true;$('rpNote').className='note';$('rpNote').textContent='Menyiapkan repo... (bisa 5-15 detik)';
     api('/setup','POST',{name:$('rpName').value.trim(),private:$('rpVis').value==='privat'})
       .then(function(r){$('rpNote').className='note ok';$('rpNote').textContent=(r.notes||[]).join(' · ');
@@ -560,7 +551,8 @@
       var warnEl=$('cWarn');
       if(warnEl){
         var w='',wc='';
-        if(g&&g.active&&ts&&ts.status==='ok'&&ts.ip){w='✅ Jalur paling andal: pasang app Tailscale di HP + login akun yang sama, lalu Host='+ts.ip+' Port='+((a&&a.tunnel&&a.tunnel.port)?3389:3389)+' (user/`password` seperti di bawah).';wc='ok'}
+        if(me&&me.rdp_start_paused){w='⛔ Sesi baru dijeda. Informasi koneksi hanya berlaku untuk run lama yang masih aktif; jangan dispatch workflow baru.';wc='bad'}
+        else if(g&&g.active&&ts&&ts.status==='ok'&&ts.ip){w='✅ Jalur paling andal: pasang app Tailscale di HP + login akun yang sama, lalu Host='+ts.ip+' Port='+((a&&a.tunnel&&a.tunnel.port)?3389:3389)+' (user/`password` seperti di bawah).';wc='ok'}
         else if(!(g&&g.active)){w='⚠️ TIDAK ADA SESI AKTIF. Alamat di atas (kalau ada) sudah tidak berlaku — alamat tunnel BERGANTI setiap sesi baru, jadi jangan pakai alamat dari sesi sebelumnya. Tekan MULAI, lalu tunggu ±5 menit sampai status AKTIF dan "Kesiapan RDP" hijau.';wc='bad'}
         else if(!tun){w='⏳ Sesi sedang disiapkan / tunnel belum terbentuk. Tunggu ±5 menit lalu muat ulang halaman ini — alamat akan muncul di baris di atas.'}
         else if(a&&a.tunnel&&a.tunnel.selftest!=='ok'){w='⚠️ Tunnel hidup tapi uji end-to-end belum lolos — coba lagi sebentar, atau pakai RustDesk.';wc='bad'}
@@ -585,6 +577,7 @@
   setInterval(tickLeft,1000);
 
   function startSesi(){
+    if(!me||me.rdp_start_paused!==false){note('Sesi baru dijeda. Baca panduan keselamatan; tidak ada workflow yang dikirim.','bad');return}
     if(me&&me.mode==='user'&&!me.ready){
       note(me.repo_exists?('Belum bisa: isi secret '+(me.missing_required||[]).join(', ')+' di repo kamu (tombol BUKA SECRETS).')
         :'Belum bisa: buat repo kamu dulu di panel "Repo kamu".','bad');

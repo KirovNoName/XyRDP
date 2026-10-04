@@ -1,70 +1,44 @@
-# XyRDP — panduan pengguna
+# XyRDP — pemberitahuan jeda
 
-**Dashboard:** [xyrdp-dash.vercel.app](https://xyrdp-dash.vercel.app)
+**Dashboard:** [xyrdp-dash.vercel.app](https://xyrdp-dash.vercel.app) · **Status dan langkah aman:** [xyrdp-dash.vercel.app/panduan](https://xyrdp-dash.vercel.app/panduan)
 
-**Panduan visual interaktif:** [xyrdp-dash.vercel.app/panduan](https://xyrdp-dash.vercel.app/panduan)
+> **Sesi RDP baru dijeda.** Jangan buat repo/secret baru atau jalankan workflow XyRDP dari salinan lama untuk melewati jeda. Job pada repo template utama sekarang dilewati sebelum runner dibuat; run yang sudah berjalan tidak dibatalkan otomatis.
 
-Sesi RDP kamu berjalan di **repo GitHub milikmu sendiri**. Pemilik dashboard tidak menjalankan sesi di repo pribadinya untuk pengguna lain.
+## Kenapa dijeda?
 
-## 1. Login dan buat repo
+Ketentuan GitHub Actions membatasi GitHub-hosted runner untuk pengembangan, pengujian, deployment, atau publikasi software yang berkaitan dengan repo. Menahan runner Windows hingga enam jam sebagai desktop RDP umum berisiko dianggap penggunaan di luar batas. GitHub menyebut job, Actions, repo, bahkan akun dapat dibatasi atau disuspend. Login admin, repo privat, secret lengkap, dan Tailscale tidak mengubah tujuan pemakaian tersebut. Baca [ketentuan resmi Actions](https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features#actions).
 
-1. Buka dashboard, lalu tekan **Masuk dengan GitHub**.
-2. Setujui akses GitHub setelah membaca halaman izin.
-3. Di panel **Repo kamu**, pilih nama serta visibilitas repo, lalu tekan **BUAT REPO DARI TEMPLATE**.
-4. Repo baru akan muncul di akunmu, misalnya `<username>/XyRDP`.
+## Jika kamu memiliki repo hasil template lama
 
-## 2. Isi dua secret wajib
+Salinan template bersifat mandiri, jadi tidak menerima perubahan repo utama secara otomatis. Untuk mencegah workflow lama dijalankan:
 
-Tekan **BUKA SECRETS** untuk membuka pengaturan repo. Masuk ke `Settings → Secrets and variables → Actions` lalu tambahkan:
+1. Buka repo XyRDP milikmu di GitHub.
+2. Pilih tab **Actions**.
+3. Pilih workflow XyRDP di daftar kiri.
+4. Buka menu **…** lalu pilih **Disable workflow**.
+5. Jangan membuat akun atau repo lain untuk menghindari pembatasan.
 
-| Nama secret | Nilai |
-|---|---|
-| `RDP_PASSWORD` | Kata sandi unik untuk login desktop RDP. Disarankan minimal 16 karakter ASCII, campuran huruf besar/kecil, angka, dan simbol sederhana. Jangan gunakan sandi GitHub/email. |
-| `TAILSCALE_AUTH_KEY` | Auth key dari akun Tailscale-mu. Buat lewat **Admin Console → Settings → Keys**; reusable diperlukan untuk alur ini dan ephemeral disarankan jika tersedia. |
+Dashboard pusat menolak permintaan start baru, tetapi tidak dapat menimpa workflow lama yang disalin ke repo pengguna dan dijalankan langsung dari GitHub.
 
-Secret opsional:
+## Jika akun GitHub sudah disuspend
 
-| Nama | Kegunaan |
-|---|---|
-| `NGROK_AUTHTOKEN` | Tunnel RDP melalui akun ngrok |
-| `CLEANUP_TOKEN` | Menghapus run Actions lama secara otomatis |
+1. Pemilik akun membaca email/banner GitHub dan mencatat alasan serta workflow/repo yang disebutkan.
+2. Hentikan penggunaan runner sebagai desktop umum. Jangan membuat akun alternatif atau mencoba menyamarkan workflow.
+3. Ajukan banding/permintaan pemulihan lewat [form resmi GitHub](https://support.github.com/contact/reinstatement). Ceritakan fakta dengan jujur dan sebutkan tindakan koreksi. Tidak ada jaminan hasil; keputusan ada pada GitHub.
+4. Ikuti balasan di tiket yang sama. Jangan membuka banyak tiket sekaligus.
+5. Jangan kirim password, PAT, OAuth secret, atau Tailscale auth key ke chat, issue, screenshot, atau form publik.
 
-**Jangan kirim nilai secret melalui chat, issue publik, screenshot, atau commit.** Isikan langsung di GitHub. Dashboard hanya memeriksa nama secret.
+## Amankan secret dan Tailscale jika tidak lagi dipakai
 
-## 3. Nyalakan sesi
+- Di repo lama, buka **Settings → Secrets and variables → Actions**. Hapus secret yang tidak akan digunakan. GitHub tidak dapat menampilkan kembali nilai secret yang tersimpan.
+- Di [Tailscale Admin → Settings → Keys](https://login.tailscale.com/admin/settings/keys), revoke auth key yang tidak dibutuhkan. Di bagian **Machines**, hapus node sesi lama/non-ephemeral yang tidak lagi diperlukan.
+- Jangan buat auth key baru untuk memulai workflow yang dijeda. Key kosong/salah biasanya menyebabkan setup atau koneksi gagal; itu saja tidak menjelaskan keputusan suspend akun.
 
-1. Kembali ke dashboard dan tekan **PERIKSA / RAPIKKAN LAGI** sampai repo berstatus **siap**.
-2. Di panel **Tampilan**, atur username RDP default dan editor opsional. Username disimpan di repo dan berlaku untuk sesi baru (3–20 karakter ASCII; huruf/angka di awal, lalu huruf, angka, `_` atau `-`).
-3. Pilih durasi dan jalur. Untuk HP, gunakan **Tailscale**.
-4. Tekan **NYALAKAN** sekali. Tunggu beberapa menit sampai status dashboard berubah menjadi **AKTIF**.
-5. Di HP, buka Tailscale dan login ke akun yang membuat auth key.
-6. Buka **XyDesk Remote → Koneksi RDP Penuh**:
-   - Host: IP `100.x` terbaru dari dashboard.
-   - Port: `3389`.
-   - User: username yang tampil di dashboard (default `xyadmin`).
-   - Password: nilai secret `RDP_PASSWORD` yang kamu masukkan sendiri.
+## Wallpaper dan status teknis
 
-Jangan gunakan IP dari sesi lama: alamat berubah saat sesi baru dimulai.
+Skrip lama dapat menulis status “berhasil” tanpa mengecek hasil panggilan Windows dan bisa mengatur profil runner/default, bukan desktop RDP yang benar-benar dilihat pengguna. Karena sesi baru dijeda, wallpaper belum diperbaiki atau dites ulang pada host interaktif yang sesuai. Jangan unggah ulang dengan harapan sesi baru akan memakai gambar saat jeda masih aktif.
 
-## 4. Wallpaper dan tampilan
-
-Wallpaper bawaan XyCloud sudah tertanam di repo template (`assets/wallpaper.jpg` dan `assets/wallpaper-win10.jpg`). Workflow menerapkannya ke desktop sesi serta latar login. Perubahan wallpaper melalui panel **Tampilan** dashboard berlaku pada sesi berikutnya. Tema gelap dan transparansi taskbar aktif secara default; opsi profil ringan hanya menonaktifkan layanan cache/telemetri non-esensial jika tersedia.
-
-## 5. Coding dan aplikasi opsional
-
-Image `windows-2022` sudah menyediakan Git, Node.js, Python, 7-Zip, .NET, Java, Visual Studio 2022, CMake, GCC/GDB. VS Code dan Notepad++ dapat dipilih di dashboard sebelum sesi berjalan; keduanya default tidak dipasang agar startup tetap ringan. Pengaturan berlaku pada sesi baru.
-
-## 6. Batasan dan keamanan
-
-- Ini **Windows Server 2022 dengan tampilan Windows 10-style**, bukan Windows 10 desktop asli.
-- Runner GitHub-hosted bersifat sementara; file lokal dapat hilang ketika sesi selesai. Simpan file penting di penyimpanan milikmu sendiri.
-- RAM standar runner ditentukan GitHub dan tidak bisa dinaikkan lewat script; dashboard menampilkan snapshot RAM akhir setup, bukan angka live. Lihat [spesifikasi runner GitHub](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
-- GPU software (Mesa llvmpipe/lavapipe) memakai CPU; tidak ada GPU fisik. Aplikasi 2D/sebagian game ringan mungkin berjalan, tetapi game 3D tidak dijamin.
-- Satu sesi dapat berjalan maksimal 6 jam dan berhenti otomatis. Gunakan **MATIKAN** setelah selesai.
-- Workflow memeriksa bahwa pemicu adalah pemilik repo sebelum job runner dijalankan. Kolaborator non-pemilik tidak dapat memulai job RDP.
-- Kuota dan penggunaan gratis mengikuti plan/kebijakan GitHub dan layanan terkait. Periksa ketentuan akunmu.
-- Repo dari template adalah salinan mandiri; update baru di template tidak otomatis muncul di repo yang sudah dibuat.
-- Hindari menyimpan data rahasia di VM sementara dan gunakan sandi RDP khusus, bukan sandi yang dipakai di layanan lain.
+Jika membutuhkan remote desktop, gunakan layanan Windows/remote desktop terkelola yang secara eksplisit mengizinkan akses interaktif sesuai paketnya. Setelah host tersebut dipilih, panduan Tailscale, aplikasi HP, pengelolaan key, dan wallpaper perlu dibuat ulang untuk host itu—bukan untuk GitHub Actions.
 
 ## Komunitas
 

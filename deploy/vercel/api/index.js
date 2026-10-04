@@ -49,6 +49,9 @@ const ENV = {
 
 const STATUS_BRANCH = 'status';        // branch tempat workflow menulis rdp-status.json
 const EXTRAS_PATH = 'assets/rdp-extras.json';
+// Pause semua pembuatan/permintaan sesi baru sampai arsitektur RDP dinyatakan sesuai kebijakan host.
+const RDP_START_PAUSED = true;
+const RDP_PAUSE_MESSAGE = 'Sesi RDP baru sedang dijeda. Jangan buat repo/secret baru atau dispatch workflow. GitHub-hosted Actions bukan layanan desktop RDP umum; baca /panduan untuk alasan, langkah pengamanan, dan banding resmi.';
 const EXTRAS_DEFAULTS = { lightshot: false, translucent: true, translucent_mode: 'clear', wallpaper: true, wallpaper_file: 'wallpaper.jpg', win10_look: true, win10_badge: true, win10_wallpaper: true, xydesk_host: true, dark_theme: true, lightweight_mode: true, vscode: false, notepadpp: false, rdp_user: 'xyadmin' };
 const RDP_USERNAME_RESERVED = new Set(['administrator', 'guest', 'defaultaccount', 'wdagutilityaccount', 'system', 'localservice', 'networkservice', 'con', 'prn', 'aux', 'nul']);
 function normalizeRdpUser(value) {
@@ -428,6 +431,8 @@ module.exports = async (req, res) => {
         turnstile_required: adminConfigured(),
         turnstile_site_key: ENV.turnstile_site_key,
         template: ENV.template,
+        rdp_start_paused: RDP_START_PAUSED,
+        pause_message: RDP_START_PAUSED ? RDP_PAUSE_MESSAGE : '',
         mode: ctx ? ctx.kind : null,
         login: ctx && ctx.kind === 'user' ? ctx.login : (ctx ? ENV.owner_login : null),
         repo: ctx ? `${ctx.owner}/${ctx.repo}` : null,
@@ -515,6 +520,7 @@ module.exports = async (req, res) => {
           repo_exists: st.ok, private: st.ok ? !!st.data.private : null,
           ready: st.ok, template: ENV.template, oauth_ready: !!(ENV.oauth_id && ENV.oauth_secret && sessionSecretReady()),
           secrets_url: `https://github.com/${ctx.owner}/${ctx.repo}/settings/secrets/actions`,
+          rdp_start_paused: RDP_START_PAUSED,
         });
       }
       const st = await repoState(ctx);
@@ -529,13 +535,14 @@ module.exports = async (req, res) => {
         template: ENV.template,
         template_url: `https://github.com/${ENV.template}`,
         secrets_url: `https://github.com/${ctx.owner}/${ctx.repo}/settings/secrets/actions`,
-        setup_note: st.error || '',
+        setup_note: st.error || '', rdp_start_paused: RDP_START_PAUSED,
       });
     }
 
     /* ============================ /setup ================================== */
     // Buat repo user dari template (kalau belum ada) + rapikan izin Actions.
     if (req.method === 'POST' && p === '/setup') {
+      if (RDP_START_PAUSED) return send(423, { error: RDP_PAUSE_MESSAGE, paused: true });
       if (ctx.kind === 'admin') return send(400, { error: 'Mode admin: repo sudah diatur lewat env Vercel.' });
       const body = await readBody(req);
       const name = String(body.name || ENV.repo).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 90) || ENV.repo;
@@ -584,6 +591,7 @@ module.exports = async (req, res) => {
         mode: ctx.kind, login: ctx.login, template: ENV.template,
         repo_url: `https://github.com/${ctx.owner}/${ctx.repo}`,
         oauth_ready: !!(ENV.oauth_id && ENV.oauth_secret && sessionSecretReady()),
+        rdp_start_paused: RDP_START_PAUSED,
         password_from_secret: ctx.kind === 'user',
       };
       if (ctx.kind === 'admin') return send(200, Object.assign(base, { rdp_password: ctx.rdp_password }));
@@ -634,6 +642,7 @@ module.exports = async (req, res) => {
 
     /* ============================ /start ================================== */
     if (req.method === 'POST' && p === '/start') {
+      if (RDP_START_PAUSED) return send(423, { error: RDP_PAUSE_MESSAGE, paused: true });
       if (ctx.kind === 'user') {
         const st = await repoState(ctx);
         if (st.error === 'token') return send(401, { error: 'Token GitHub kamu sudah tidak berlaku — login lagi.', need_login: true });
@@ -689,6 +698,7 @@ module.exports = async (req, res) => {
       return send(200, extrasResponse(ctx, cfg, !!(json && json.wallpaper_file)));
     }
     if (req.method === 'POST' && p === '/extras') {
+      if (RDP_START_PAUSED) return send(423, { error: RDP_PAUSE_MESSAGE, paused: true });
       const body = await readBody(req);
       const { json: cur, sha } = await readRepoFile(ctx, EXTRAS_PATH);
       const next = Object.assign({}, EXTRAS_DEFAULTS, cur || {});
@@ -712,6 +722,7 @@ module.exports = async (req, res) => {
 
     /* ============================ /wallpaper ============================== */
     if (req.method === 'POST' && p === '/wallpaper') {
+      if (RDP_START_PAUSED) return send(423, { error: RDP_PAUSE_MESSAGE, paused: true });
       const body = await readBody(req);
       const m = /^data:image\/(png|jpe?g|bmp);base64,([A-Za-z0-9+/=\s]+)$/.exec(String(body.image || ''));
       if (!m) return send(400, { error: 'Format gambar tidak didukung (jpg/png/bmp)' });
