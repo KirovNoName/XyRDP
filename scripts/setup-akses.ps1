@@ -482,17 +482,24 @@ function Start-Tailscale {
   }
   Log "  tailscale: IP=$ip4 magicdns=$dns state=$stTxt"
 
-  # bonus: funnel (alamat publik tanpa app Tailscale di HP) - best effort
+  # funnel: HANYA saat mode akses = 'semua'. Funnel Tailscale selalu TLS di sisi
+  # publik ("Funnel only works over TLS-encrypted connections"), sehingga klien RDP
+  # mentah (mstsc/XyDesk Remote - mulai dengan X.224) TIDAK BISA memakainya.
+  # Diuji 4 Okt: AllowFunnel=true + DNS publik terbit + cert ok, tapi handshake RDP
+  # selalu ditutup relay (0 byte). Jadi default: funnel dilewati.
   $funnel = 'tidak aktif'; $funnelAddr = ''
-  $f = Invoke-Cmd $tsExe @('funnel', '--bg', '--tcp', '10000', 'tcp://127.0.0.1:3389') 60
-  if ($f.code -ne 0) {
-    $srv = Invoke-Cmd $tsExe @('serve', '--bg', '--tcp', '10000', 'tcp://127.0.0.1:3389') 60
-    if ($srv.code -eq 0) { $f = Invoke-Cmd $tsExe @('funnel', '--bg', '--tcp', '10000') 60 }
+  $f = @{ code = 1; out = ''; err = "dilewati (mode '$env:AKSES' bukan 'semua')" }
+  if ("$env:AKSES" -eq 'semua') {
+    $f = Invoke-Cmd $tsExe @('funnel', '--bg', '--tcp', '10000', 'tcp://127.0.0.1:3389') 60
+    if ($f.code -ne 0) {
+      $srv = Invoke-Cmd $tsExe @('serve', '--bg', '--tcp', '10000', 'tcp://127.0.0.1:3389') 60
+      if ($srv.code -eq 0) { $f = Invoke-Cmd $tsExe @('funnel', '--bg', '--tcp', '10000') 60 }
+    }
   }
   if ($f.code -eq 0) {
     $funnel = 'ok'
     if ($dns) { $funnelAddr = (($dns.TrimEnd('.')) + ':10000') }
-    Log "  tailscale: FUNNEL OK -> $funnelAddr (bisa dipakai dari HP tanpa app Tailscale)"
+    Log "  tailscale: FUNNEL OK -> $funnelAddr (hanya berguna untuk klien TLS - RDP mentah tidak bisa)"
   } else {
     $tail = (("$($f.err) $($f.out)") -replace '\s+', ' ').Trim()
     Log "  tailscale: funnel tidak aktif (exit=$($f.code)$(if ($tail) { ': ' + $tail.Substring(0, [Math]::Min(150, $tail.Length)) })) - jalur IP 100.x tetap jalan"
