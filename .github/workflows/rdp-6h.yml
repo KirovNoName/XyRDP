@@ -1,12 +1,5 @@
 name: XyRDP — RDP baru dijeda
 run-name: "XyRDP ${{ inputs.hostname || 'xyrdp' }} • ${{ inputs.durasi_menit || '360' }} mnt • ${{ inputs.akses || 'keduanya' }}"
-
-# ============================================================================
-#  PAUSE DARURAT (2026-10-04): job sengaja dilewati sebelum runner dialokasikan.
-#  Jangan hapus gate ini untuk menawarkan desktop RDP umum di runner Actions.
-#  Run yang sudah berjalan tidak dihentikan oleh perubahan ini.
-# ============================================================================
-
 on:
   workflow_dispatch:
     inputs:
