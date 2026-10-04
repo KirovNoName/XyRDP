@@ -103,8 +103,7 @@ concurrency:
 jobs:
   rdp:
     # PAUSE: job baru tidak boleh mengambil GitHub-hosted runner.
-    # Job yang telah berjalan sebelumnya tidak terpengaruh dan tidak dibatalkan.
-    if: ${{ false }}
+    # Job yang telah berjalan sebelumnya tidak terpengaruh dan tidak dibatalka
     # windows-2022 = Server 2022 (UI/kernel Windows 10 21H2). Jangan pakai
     # windows-latest: sejak Juni 2026 label itu = Windows Server 2025 (UI Win11).
     runs-on: windows-2022
