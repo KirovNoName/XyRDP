@@ -1,6 +1,6 @@
 {
-  "active": false,
-  "hostname": "xyrdp-6",
+  "active": true,
+  "hostname": "xyrdp-7",
   "os": "Microsoft Windows Server 2022 Datacenter",
   "os_build": "10.0.20348",
   "os_style": "Windows 10 look",
@@ -8,12 +8,12 @@
   "rdp_user": "Administration",
   "rdp_listen": ":::3389 (svchost) | 0.0.0.0:3389 (svchost) + handshake ok via 127.0.0.1",
   "rdp_denyts": true,
-  "started_at": "2026-10-09T16:24:25Z",
-  "expires_at": "2026-10-09T22:19:25Z",
+  "started_at": "2026-10-09T22:30:25Z",
+  "expires_at": "2026-10-10T04:25:25Z",
   "duration_menit": 355,
-  "run_id": "37958855700",
-  "run_number": "6",
-  "run_url": "https://github.com/KirovNoName/XyRDP/actions/runs/37958855700",
+  "run_id": "37999559908",
+  "run_number": "7",
+  "run_url": "https://github.com/KirovNoName/XyRDP/actions/runs/37999559908",
   "mode": "bersih+win10",
   "win10": {
     "look": "ok",
@@ -40,17 +40,17 @@
     "note": "Host siap dipakai klien XyDesk Remote mode Koneksi RDP (Host+Port tunnel). Kunci WinStations\\RDP-Tcp sengaja TIDAK ditulis supaya listener 3389 tidak mati di runner GitHub."
   },
   "grafis": {
-    "dir": "C:\\XyRDP\\grafis",
-    "loader": "vulkan-1.dll 1.4.363.0 (LunarG)",
-    "install": "mesa 26.2.4.0 [Mesa/X.org]",
-    "note": "GPU software (CPU): OpenGL 4.6 (llvmpipe) + Vulkan lavapipe + WARP bawaan. Runner GitHub tanpa GPU fisik; 3D berat tetap lambat.",
-    "adapters": "Microsoft Hyper-V Video",
-    "mesa": "26.2.4",
-    "vulkan": "llvmpipe (LLVM 23.1.2, 256 bits) (PHYSICAL_DEVICE_TYPE_CPU)",
-    "opengl": "4.6 (Core Profile) Mesa 26.2.4 (git-9a0169f2a7) | llvmpipe (LLVM 23.1.2, 256 bits) | Mesa",
     "mode": "software",
+    "opengl": "4.6 (Core Profile) Mesa 26.2.4 (git-9a0169f2a7) | llvmpipe (LLVM 23.1.2, 256 bits) | Mesa",
+    "loader": "vulkan-1.dll 1.4.363.0 (LunarG)",
+    "dir": "C:\\XyRDP\\grafis",
+    "vulkan": "llvmpipe (LLVM 23.1.2, 256 bits) (PHYSICAL_DEVICE_TYPE_CPU)",
+    "note": "GPU software (CPU): OpenGL 4.6 (llvmpipe) + Vulkan lavapipe + WARP bawaan. Runner GitHub tanpa GPU fisik; 3D berat tetap lambat.",
     "files": "opengl32.dll,libgallium_wgl.dll,vulkan_lvp.dll,vulkan-1.dll",
-    "debug": ""
+    "install": "mesa 26.2.4.0 [Mesa/X.org]",
+    "debug": "",
+    "adapters": "Microsoft Hyper-V Video",
+    "mesa": "26.2.4"
   },
   "extras": {
     "lightshot": "skip",
@@ -66,37 +66,35 @@
     "rustdesk": {
       "status": "skip",
       "service": null,
+      "id": "",
       "server": "rs-ny.rustdesk.com / rs-sg.rustdesk.com (server publik RustDesk)",
-      "client": "Unduh app RustDesk (gratis) -> masukkan ID + password",
-      "id": ""
+      "client": "Unduh app RustDesk (gratis) -> masukkan ID + password"
     },
     "tailscale": {
       "status": "ok",
-      "ip": "100.123.31.30",
-      "magicdns": "xyrdp-6.tail57e4a2.ts.net.",
-      "hostname": "xyrdp-6",
+      "ip": "100.92.188.53",
+      "magicdns": "xyrdp-7.tail57e4a2.ts.net.",
+      "hostname": "xyrdp-7",
       "funnel": "tidak aktif",
       "funnel_addr": "",
-      "note": "Di HP: pasang app Tailscale + login akun yang sama, lalu Host=100.123.31.30 Port=3389 di XyDesk Remote (atau mstsc). Funnel: tidak aktif"
+      "note": "Di HP: pasang app Tailscale + login akun yang sama, lalu Host=100.92.188.53 Port=3389 di XyDesk Remote (atau mstsc). Funnel: tidak aktif"
     },
     "tunnel": {
       "status": "skip",
       "provider": "",
+      "host": "",
+      "port": 0,
+      "address": "",
       "rdp_local": "",
       "selftest": "",
       "outside": "",
       "note2": "",
-      "note": "Isi Host+Port ini di XyDesk Remote (Koneksi RDP) atau mstsc; user Administration",
-      "host": "",
-      "port": 0,
-      "address": ""
+      "note": "Isi Host+Port ini di XyDesk Remote (Koneksi RDP) atau mstsc; user Administration"
     }
   },
   "memory": {
     "total_mb": 16379,
-    "available_mb": 13636,
+    "available_mb": 13828,
     "measured": "akhir setup"
-  },
-  "heartbeat_at": "2026-10-09T21:56:58Z",
-  "stopped_at": "2026-10-09T22:17:15Z"
+  }
 }
