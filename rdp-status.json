@@ -1,5 +1,5 @@
 {
-  "active": true,
+  "active": false,
   "hostname": "xyrdp-7",
   "os": "Microsoft Windows Server 2022 Datacenter",
   "os_build": "10.0.20348",
@@ -66,9 +66,9 @@
     "rustdesk": {
       "status": "skip",
       "service": null,
-      "id": "",
       "server": "rs-ny.rustdesk.com / rs-sg.rustdesk.com (server publik RustDesk)",
-      "client": "Unduh app RustDesk (gratis) -> masukkan ID + password"
+      "client": "Unduh app RustDesk (gratis) -> masukkan ID + password",
+      "id": ""
     },
     "tailscale": {
       "status": "ok",
@@ -82,14 +82,14 @@
     "tunnel": {
       "status": "skip",
       "provider": "",
-      "host": "",
-      "port": 0,
-      "address": "",
       "rdp_local": "",
       "selftest": "",
       "outside": "",
       "note2": "",
-      "note": "Isi Host+Port ini di XyDesk Remote (Koneksi RDP) atau mstsc; user Administration"
+      "note": "Isi Host+Port ini di XyDesk Remote (Koneksi RDP) atau mstsc; user Administration",
+      "host": "",
+      "port": 0,
+      "address": ""
     }
   },
   "memory": {
@@ -97,5 +97,6 @@
     "available_mb": 13828,
     "measured": "akhir setup"
   },
-  "heartbeat_at": "2026-10-10T04:05:22Z"
+  "heartbeat_at": "2026-10-10T04:05:22Z",
+  "stopped_at": "2026-10-10T04:20:57Z"
 }
