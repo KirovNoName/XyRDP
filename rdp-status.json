@@ -1,5 +1,5 @@
 {
-  "active": true,
+  "active": false,
   "hostname": "rdpsucks-11",
   "os": "Microsoft Windows Server 2022 Datacenter",
   "os_build": "10.0.20348",
@@ -41,10 +41,11 @@
   "akses": {
     "tailscale": {
       "status": "ok",
-      "magicdns": "rdpsucks-11.tail57e4a2.ts.net.",
       "note": "HP/PC harus login Tailscale pada tailnet yang sama. TCP 3389 harus diizinkan ACL.",
-      "hostname": "rdpsucks-11",
-      "ip": "100.73.147.40"
+      "ip": "",
+      "magicdns": "",
+      "hostname": "",
+      "funnel_addr": ""
     },
     "mode": "tailscale"
   },
@@ -108,5 +109,6 @@
     "runner": "windows-2022",
     "hypervisor_present": true
   },
-  "heartbeat_at": "2026-10-12T21:41:18.8689131Z"
+  "heartbeat_at": "2026-10-12T21:41:18.8689131Z",
+  "stopped_at": "2026-10-12T21:46:30Z"
 }
