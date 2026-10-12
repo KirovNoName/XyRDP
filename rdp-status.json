@@ -53,5 +53,59 @@
     "microphone": "rdp_capture_enabled",
     "audio_output": "rdp_playback_enabled",
     "wallpaper": "xyverse_configured_for_user_logon"
+  },
+  "grafis": {
+    "loader": "vulkan-1.dll 1.4.363.0 (LunarG)",
+    "mode": "software",
+    "adapters": "Microsoft Hyper-V Video",
+    "dir": "C:\\XyRDP\\grafis",
+    "vulkan": "llvmpipe (LLVM 23.1.2, 256 bits) (PHYSICAL_DEVICE_TYPE_CPU)",
+    "note": "GPU software (CPU): OpenGL 4.6 (llvmpipe) + Vulkan lavapipe + WARP bawaan. Runner GitHub tanpa GPU fisik; 3D berat tetap lambat.",
+    "mesa": "26.2.4",
+    "files": "opengl32.dll,libgallium_wgl.dll,vulkan_lvp.dll,vulkan-1.dll",
+    "opengl": "4.6 (Core Profile) Mesa 26.2.4 (git-9a0169f2a7) | llvmpipe (LLVM 23.1.2, 256 bits) | Mesa",
+    "debug": "",
+    "install": "mesa 26.2.4.0 [Mesa/X.org]"
+  },
+  "samp": {
+    "vcredist": "verified_x86_x64_and_2013_x86",
+    "note": "DirectX legacy diverifikasi x86/x64. GTA SA dan SA-MP dipasang manual dari sumber sah. Game, GPU, dan koneksi server belum diuji.",
+    "netfx3": "Enabled",
+    "play_tested": false,
+    "samp_installed": false,
+    "directplay": "Enabled",
+    "gta_installed": false,
+    "status": "dependencies_ready",
+    "directx": "verified_x86_x64"
+  },
+  "games": {
+    "minecraft_java": {
+      "path": "C:\\Users\\Public\\Desktop\\RdpFree Installers\\MinecraftInstaller.msi",
+      "status": "installer_ready",
+      "note": "Buka installer di sesi Windows, login dengan akun berlisensi, lalu uji game. Belum berarti game sudah berjalan.",
+      "compatibility": "Launcher resmi mengelola runtime Java. Akun berlisensi dan dukungan OpenGL/GPU tetap diperlukan."
+    },
+    "roblox": {
+      "status": "unsupported_environment",
+      "note": "Roblox mensyaratkan Windows 10/11 desktop 64-bit dan dukungan GPU. Windows Server runner bukan target yang didukung; memasang DX9 tidak mengubah ini."
+    },
+    "minecraft_bedrock": {
+      "status": "disabled",
+      "note": "Tidak dipilih"
+    },
+    "samp": {
+      "note": "DirectX legacy diverifikasi x86/x64. GTA SA dan SA-MP dipasang manual dari sumber sah. Game, GPU, dan koneksi server belum diuji.",
+      "status": "dependencies_ready",
+      "samp_installed": false,
+      "gta_installed": false,
+      "game_dir": null
+    }
+  },
+  "game_environment": {
+    "play_tested": false,
+    "os": "Microsoft Windows Server 2022 Datacenter",
+    "windows_server": true,
+    "runner": "windows-2022",
+    "hypervisor_present": true
   }
 }
