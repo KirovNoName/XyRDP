@@ -1,36 +1,35 @@
 {
-  "active": false,
-  "hostname": "xyrdp-9",
+  "active": true,
+  "hostname": "rdpfree-10",
   "os": "Microsoft Windows Server 2022 Datacenter",
   "os_build": "10.0.20348",
-  "os_style": "Windows 10 look",
+  "os_style": "Native Windows",
+  "hardware": {
+    "ram_gb": 16.0,
+    "cpu_threads": 4,
+    "disk_free_gb": 82.2
+  },
   "rdp_port": 3389,
-  "rdp_user": "Administration",
+  "rdp_user": "xyadmin",
   "rdp_listen": ":::3389 (svchost) | 0.0.0.0:3389 (svchost) + handshake ok via 127.0.0.1",
   "rdp_denyts": true,
-  "started_at": "2026-10-10T11:46:25Z",
-  "expires_at": "2026-10-10T17:41:25Z",
+  "started_at": "2026-10-12T10:25:49Z",
+  "expires_at": "2026-10-12T16:20:49Z",
   "duration_menit": 355,
-  "run_id": "38049579739",
-  "run_number": "9",
-  "run_url": "https://github.com/KirovNoName/XyRDP/actions/runs/38049579739",
+  "run_id": "38236239779",
+  "run_attempt": "1",
+  "run_number": "10",
+  "run_url": "https://github.com/KirovNoName/XyRDP/actions/runs/38236239779",
   "mode": "bersih+win10",
-  "win10": {
-    "look": "ok",
-    "badge": "ok",
-    "wallpaper": "ok",
-    "search": "ok",
-    "os": "Microsoft Windows Server 2022 Datacenter",
-    "note": "Tampilan Windows 10 (UI Windows Server 2022 = kernel/UI Windows 10 21H2)"
-  },
   "xydesk": {
     "host": "ok",
     "denyts": "ok",
     "multisession": "ok",
     "avc444": "ok",
     "fontsmoothing": "ok (ClearType profil Default)",
-    "audio_out": "ok (fDisableAudio=)",
-    "audio_mic": "ok (fDisableAudioCapture=0)",
+    "audio_out": "ok (policy fDisableAudio=, WinStations=)",
+    "audio_mic": "ok (policy fDisableAudioCapture=, WinStations=0) - mic HP redirect aktif, Allow di HP",
+    "wallpaper_rdp": "ok (policy fNoRemoteDesktopWallpaper=) - wallpaper RDP tampil, cek client Experience→Wallpaper ON",
     "firewall": "tcp3389=True udp3389=True udp4433=True",
     "services": "ok",
     "rdp_ready": "127.0.0.1 (handshake OK)",
@@ -39,64 +38,20 @@
     "akses": "(menyusul)",
     "note": "Host siap dipakai klien XyDesk Remote mode Koneksi RDP (Host+Port tunnel). Kunci WinStations\\RDP-Tcp sengaja TIDAK ditulis supaya listener 3389 tidak mati di runner GitHub."
   },
-  "grafis": {
-    "note": "GPU software (CPU): OpenGL 4.6 (llvmpipe) + Vulkan lavapipe + WARP bawaan. Runner GitHub tanpa GPU fisik; 3D berat tetap lambat.",
-    "install": "mesa 26.2.4.0 [Mesa/X.org]",
-    "adapters": "Microsoft Hyper-V Video",
-    "opengl": "4.6 (Core Profile) Mesa 26.2.4 (git-9a0169f2a7) | llvmpipe (LLVM 23.1.2, 256 bits) | Mesa",
-    "vulkan": "llvmpipe (LLVM 23.1.2, 256 bits) (PHYSICAL_DEVICE_TYPE_CPU)",
-    "files": "opengl32.dll,libgallium_wgl.dll,vulkan_lvp.dll,vulkan-1.dll",
-    "mode": "software",
-    "debug": "",
-    "loader": "vulkan-1.dll 1.4.363.0 (LunarG)",
-    "mesa": "26.2.4",
-    "dir": "C:\\XyRDP\\grafis"
-  },
-  "extras": {
-    "lightshot": "skip",
-    "translucent": "ok",
-    "wallpaper": "ok",
-    "wallpaper_file": "wallpaper.jpg",
-    "vscode": "skip",
-    "notepadpp": "skip",
-    "admin": true
-  },
   "akses": {
     "mode": "tailscale",
-    "rustdesk": {
-      "status": "skip",
-      "service": null,
-      "server": "rs-ny.rustdesk.com / rs-sg.rustdesk.com (server publik RustDesk)",
-      "client": "Unduh app RustDesk (gratis) -> masukkan ID + password",
-      "id": ""
-    },
     "tailscale": {
       "status": "ok",
-      "ip": "100.113.164.117",
-      "magicdns": "xyrdp-9.tail57e4a2.ts.net.",
-      "hostname": "xyrdp-9",
-      "funnel": "tidak aktif",
-      "funnel_addr": "",
-      "note": "Di HP: pasang app Tailscale + login akun yang sama, lalu Host=100.113.164.117 Port=3389 di XyDesk Remote (atau mstsc). Funnel: tidak aktif"
-    },
-    "tunnel": {
-      "status": "skip",
-      "provider": "",
-      "rdp_local": "",
-      "selftest": "",
-      "outside": "",
-      "note2": "",
-      "note": "Isi Host+Port ini di XyDesk Remote (Koneksi RDP) atau mstsc; user Administration",
-      "host": "",
-      "port": 0,
-      "address": ""
+      "hostname": "rdpfree-10",
+      "ip": "100.127.96.31",
+      "note": "HP/PC harus login Tailscale pada tailnet yang sama. TCP 3389 harus diizinkan ACL.",
+      "magicdns": "rdpfree-10.tail57e4a2.ts.net."
     }
   },
-  "memory": {
-    "total_mb": 16379,
-    "available_mb": 13787,
-    "measured": "akhir setup"
-  },
-  "heartbeat_at": "2026-10-10T12:57:17Z",
-  "stopped_at": "2026-10-10T13:53:17Z"
+  "media": {
+    "audio_output": "rdp_playback_enabled",
+    "wallpaper": "xyverse_configured_for_user_logon",
+    "verification": "Login ulang, aktifkan mic di XyDesk dan izinkan Android. Uji Windows Settings > Sound > Input; kebijakan aktif bukan bukti capture end-to-end.",
+    "microphone": "rdp_capture_enabled"
+  }
 }
