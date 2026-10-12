@@ -1,25 +1,25 @@
 {
-  "active": false,
-  "hostname": "rdpfree-10",
+  "active": true,
+  "hostname": "rdpsucks-11",
   "os": "Microsoft Windows Server 2022 Datacenter",
   "os_build": "10.0.20348",
   "os_style": "Native Windows",
   "hardware": {
+    "disk_free_gb": 79.3,
     "ram_gb": 16.0,
-    "cpu_threads": 4,
-    "disk_free_gb": 82.2
+    "cpu_threads": 4
   },
   "rdp_port": 3389,
   "rdp_user": "xyadmin",
   "rdp_listen": ":::3389 (svchost) | 0.0.0.0:3389 (svchost) + handshake ok via 127.0.0.1",
   "rdp_denyts": true,
-  "started_at": "2026-10-12T10:25:49Z",
-  "expires_at": "2026-10-12T16:20:49Z",
+  "started_at": "2026-10-12T15:53:16Z",
+  "expires_at": "2026-10-12T21:48:16Z",
   "duration_menit": 355,
-  "run_id": "38236239779",
+  "run_id": "38273451888",
   "run_attempt": "1",
-  "run_number": "10",
-  "run_url": "https://github.com/KirovNoName/XyRDP/actions/runs/38236239779",
+  "run_number": "11",
+  "run_url": "https://github.com/KirovNoName/XyRDP/actions/runs/38273451888",
   "mode": "bersih+win10",
   "xydesk": {
     "host": "ok",
@@ -39,61 +39,19 @@
     "note": "Host siap dipakai klien XyDesk Remote mode Koneksi RDP (Host+Port tunnel). Kunci WinStations\\RDP-Tcp sengaja TIDAK ditulis supaya listener 3389 tidak mati di runner GitHub."
   },
   "akses": {
-    "mode": "tailscale",
     "tailscale": {
       "status": "ok",
+      "magicdns": "rdpsucks-11.tail57e4a2.ts.net.",
       "note": "HP/PC harus login Tailscale pada tailnet yang sama. TCP 3389 harus diizinkan ACL.",
-      "ip": "",
-      "magicdns": "",
-      "hostname": "",
-      "funnel_addr": ""
-    }
+      "hostname": "rdpsucks-11",
+      "ip": "100.73.147.40"
+    },
+    "mode": "tailscale"
   },
   "media": {
-    "audio_output": "rdp_playback_enabled",
-    "wallpaper": "xyverse_configured_for_user_logon",
     "verification": "Login ulang, aktifkan mic di XyDesk dan izinkan Android. Uji Windows Settings > Sound > Input; kebijakan aktif bukan bukti capture end-to-end.",
-    "microphone": "rdp_capture_enabled"
-  },
-  "samp": {
-    "status": "dependencies_ready",
-    "vcredist": "verified_x86_x64_and_2013_x86",
-    "gta_installed": false,
-    "samp_installed": false,
-    "netfx3": "Enabled",
-    "directplay": "Enabled",
-    "directx": "verified_x86_x64",
-    "play_tested": false,
-    "note": "DirectX legacy diverifikasi x86/x64. GTA SA dan SA-MP dipasang manual dari sumber sah. Game, GPU, dan koneksi server belum diuji."
-  },
-  "game_environment": {
-    "hypervisor_present": true,
-    "windows_server": true,
-    "runner": "windows-2022",
-    "os": "Microsoft Windows Server 2022 Datacenter",
-    "play_tested": false
-  },
-  "games": {
-    "minecraft_java": {
-      "note": "Tidak dipilih",
-      "status": "disabled"
-    },
-    "minecraft_bedrock": {
-      "note": "Tidak dipilih",
-      "status": "disabled"
-    },
-    "roblox": {
-      "note": "Tidak dipilih",
-      "status": "disabled"
-    },
-    "samp": {
-      "status": "dependencies_ready",
-      "note": "DirectX legacy diverifikasi x86/x64. GTA SA dan SA-MP dipasang manual dari sumber sah. Game, GPU, dan koneksi server belum diuji.",
-      "samp_installed": false,
-      "game_dir": null,
-      "gta_installed": false
-    }
-  },
-  "heartbeat_at": "2026-10-12T15:21:57.7799618Z",
-  "stopped_at": "2026-10-12T15:23:50Z"
+    "microphone": "rdp_capture_enabled",
+    "audio_output": "rdp_playback_enabled",
+    "wallpaper": "xyverse_configured_for_user_logon"
+  }
 }
