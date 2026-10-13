@@ -53,5 +53,59 @@
     "microphone": "rdp_capture_enabled",
     "verification": "Login ulang, aktifkan mic di XyDesk dan izinkan Android. Uji Windows Settings > Sound > Input; kebijakan aktif bukan bukti capture end-to-end.",
     "audio_output": "rdp_playback_enabled"
+  },
+  "grafis": {
+    "install": "mesa 26.2.4.0 [Mesa/X.org]",
+    "vulkan": "llvmpipe (LLVM 23.1.2, 256 bits) (PHYSICAL_DEVICE_TYPE_CPU)",
+    "adapters": "Microsoft Hyper-V Video",
+    "debug": "",
+    "loader": "vulkan-1.dll 1.4.363.0 (LunarG)",
+    "note": "GPU software (CPU): OpenGL 4.6 (llvmpipe) + Vulkan lavapipe + WARP bawaan. Runner GitHub tanpa GPU fisik; 3D berat tetap lambat.",
+    "files": "opengl32.dll,libgallium_wgl.dll,vulkan_lvp.dll,vulkan-1.dll",
+    "mesa": "26.2.4",
+    "mode": "software",
+    "opengl": "4.6 (Core Profile) Mesa 26.2.4 (git-9a0169f2a7) | llvmpipe (LLVM 23.1.2, 256 bits) | Mesa",
+    "dir": "C:\\XyRDP\\grafis"
+  },
+  "samp": {
+    "samp_installed": false,
+    "netfx3": "not_requested",
+    "directplay": "not_requested",
+    "play_tested": false,
+    "status": "dependencies_failed",
+    "directx": "pending",
+    "gta_installed": false,
+    "note": "Installer timeout; periksa log lokal Windows.",
+    "vcredist": "not_requested"
+  },
+  "games": {
+    "minecraft_bedrock": {
+      "status": "disabled",
+      "note": "Tidak dipilih"
+    },
+    "roblox": {
+      "status": "unsupported_environment",
+      "note": "Roblox mensyaratkan Windows 10/11 desktop 64-bit dan dukungan GPU. Windows Server runner bukan target yang didukung; memasang DX9 tidak mengubah ini."
+    },
+    "minecraft_java": {
+      "path": "C:\\Users\\Public\\Desktop\\RdpFree Installers\\MinecraftInstaller.msi",
+      "note": "Buka installer di sesi Windows, login dengan akun berlisensi, lalu uji game. Belum berarti game sudah berjalan.",
+      "compatibility": "Launcher resmi mengelola runtime Java. Akun berlisensi dan dukungan OpenGL/GPU tetap diperlukan.",
+      "status": "installer_ready"
+    },
+    "samp": {
+      "game_dir": null,
+      "note": "Installer timeout; periksa log lokal Windows.",
+      "samp_installed": false,
+      "gta_installed": false,
+      "status": "dependencies_failed"
+    }
+  },
+  "game_environment": {
+    "runner": "windows-2022",
+    "windows_server": true,
+    "os": "Microsoft Windows Server 2022 Datacenter",
+    "hypervisor_present": true,
+    "play_tested": false
   }
 }
