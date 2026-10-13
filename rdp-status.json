@@ -1,5 +1,5 @@
 {
-  "active": true,
+  "active": false,
   "hostname": "rdpsucks-13",
   "os": "Microsoft Windows Server 2022 Datacenter",
   "os_build": "10.0.20348",
@@ -42,10 +42,11 @@
     "mode": "tailscale",
     "tailscale": {
       "status": "ok",
-      "ip": "100.85.145.54",
-      "magicdns": "rdpsucks-13.tail57e4a2.ts.net.",
-      "hostname": "rdpsucks-13",
-      "note": "HP/PC harus login Tailscale pada tailnet yang sama. TCP 3389 harus diizinkan ACL."
+      "note": "HP/PC harus login Tailscale pada tailnet yang sama. TCP 3389 harus diizinkan ACL.",
+      "ip": "",
+      "magicdns": "",
+      "hostname": "",
+      "funnel_addr": ""
     }
   },
   "media": {
@@ -131,5 +132,6 @@
       "path": "C:\\Users\\Public\\Desktop\\RdpFree Installers\\MinecraftInstaller.msi"
     }
   },
-  "heartbeat_at": "2026-10-13T03:45:58.7801444Z"
+  "heartbeat_at": "2026-10-13T03:45:58.7801444Z",
+  "stopped_at": "2026-10-13T03:50:08Z"
 }
