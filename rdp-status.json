@@ -1,25 +1,25 @@
 {
-  "active": false,
-  "hostname": "rdpsucks-12",
+  "active": true,
+  "hostname": "rdpsucks-13",
   "os": "Microsoft Windows Server 2022 Datacenter",
   "os_build": "10.0.20348",
   "os_style": "Native Windows",
   "hardware": {
-    "cpu_threads": 4,
-    "disk_free_gb": 82.4,
-    "ram_gb": 16.0
+    "disk_free_gb": 82.2,
+    "ram_gb": 16.0,
+    "cpu_threads": 4
   },
   "rdp_port": 3389,
   "rdp_user": "xyadmin",
   "rdp_listen": ":::3389 (svchost) | 0.0.0.0:3389 (svchost) + handshake ok via 127.0.0.1",
   "rdp_denyts": true,
-  "started_at": "2026-10-13T00:09:58Z",
-  "expires_at": "2026-10-13T06:04:58Z",
+  "started_at": "2026-10-13T02:32:17Z",
+  "expires_at": "2026-10-13T08:27:17Z",
   "duration_menit": 355,
-  "run_id": "38325861039",
+  "run_id": "38337331657",
   "run_attempt": "1",
-  "run_number": "12",
-  "run_url": "https://github.com/KirovNoName/XyRDP/actions/runs/38325861039",
+  "run_number": "13",
+  "run_url": "https://github.com/KirovNoName/XyRDP/actions/runs/38337331657",
   "mode": "bersih+win10",
   "xydesk": {
     "host": "ok",
@@ -41,74 +41,17 @@
   "akses": {
     "mode": "tailscale",
     "tailscale": {
-      "note": "HP/PC harus login Tailscale pada tailnet yang sama. TCP 3389 harus diizinkan ACL.",
       "status": "ok",
-      "ip": "",
-      "magicdns": "",
-      "hostname": "",
-      "funnel_addr": ""
+      "ip": "100.85.145.54",
+      "magicdns": "rdpsucks-13.tail57e4a2.ts.net.",
+      "hostname": "rdpsucks-13",
+      "note": "HP/PC harus login Tailscale pada tailnet yang sama. TCP 3389 harus diizinkan ACL."
     }
   },
   "media": {
+    "microphone": "disabled",
     "wallpaper": "xyverse_configured_for_user_logon",
-    "microphone": "rdp_capture_enabled",
     "verification": "Login ulang, aktifkan mic di XyDesk dan izinkan Android. Uji Windows Settings > Sound > Input; kebijakan aktif bukan bukti capture end-to-end.",
     "audio_output": "rdp_playback_enabled"
-  },
-  "grafis": {
-    "install": "mesa 26.2.4.0 [Mesa/X.org]",
-    "vulkan": "llvmpipe (LLVM 23.1.2, 256 bits) (PHYSICAL_DEVICE_TYPE_CPU)",
-    "adapters": "Microsoft Hyper-V Video",
-    "debug": "",
-    "loader": "vulkan-1.dll 1.4.363.0 (LunarG)",
-    "note": "GPU software (CPU): OpenGL 4.6 (llvmpipe) + Vulkan lavapipe + WARP bawaan. Runner GitHub tanpa GPU fisik; 3D berat tetap lambat.",
-    "files": "opengl32.dll,libgallium_wgl.dll,vulkan_lvp.dll,vulkan-1.dll",
-    "mesa": "26.2.4",
-    "mode": "software",
-    "opengl": "4.6 (Core Profile) Mesa 26.2.4 (git-9a0169f2a7) | llvmpipe (LLVM 23.1.2, 256 bits) | Mesa",
-    "dir": "C:\\XyRDP\\grafis"
-  },
-  "samp": {
-    "samp_installed": false,
-    "netfx3": "not_requested",
-    "directplay": "not_requested",
-    "play_tested": false,
-    "status": "dependencies_failed",
-    "directx": "pending",
-    "gta_installed": false,
-    "note": "Installer timeout; periksa log lokal Windows.",
-    "vcredist": "not_requested"
-  },
-  "games": {
-    "minecraft_bedrock": {
-      "status": "disabled",
-      "note": "Tidak dipilih"
-    },
-    "roblox": {
-      "status": "unsupported_environment",
-      "note": "Roblox mensyaratkan Windows 10/11 desktop 64-bit dan dukungan GPU. Windows Server runner bukan target yang didukung; memasang DX9 tidak mengubah ini."
-    },
-    "minecraft_java": {
-      "path": "C:\\Users\\Public\\Desktop\\RdpFree Installers\\MinecraftInstaller.msi",
-      "note": "Buka installer di sesi Windows, login dengan akun berlisensi, lalu uji game. Belum berarti game sudah berjalan.",
-      "compatibility": "Launcher resmi mengelola runtime Java. Akun berlisensi dan dukungan OpenGL/GPU tetap diperlukan.",
-      "status": "installer_ready"
-    },
-    "samp": {
-      "game_dir": null,
-      "note": "Installer timeout; periksa log lokal Windows.",
-      "samp_installed": false,
-      "gta_installed": false,
-      "status": "dependencies_failed"
-    }
-  },
-  "game_environment": {
-    "runner": "windows-2022",
-    "windows_server": true,
-    "os": "Microsoft Windows Server 2022 Datacenter",
-    "hypervisor_present": true,
-    "play_tested": false
-  },
-  "heartbeat_at": "2026-10-13T02:18:47.0049505Z",
-  "stopped_at": "2026-10-13T02:23:13Z"
+  }
 }
