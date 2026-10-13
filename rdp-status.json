@@ -107,5 +107,6 @@
     "os": "Microsoft Windows Server 2022 Datacenter",
     "hypervisor_present": true,
     "play_tested": false
-  }
+  },
+  "heartbeat_at": "2026-10-13T00:41:48.3736731Z"
 }
